@@ -1,0 +1,932 @@
+package WebEditor
+
+use Libraries.Language.Compile.Parsing.QuorumLexer
+use Libraries.System.File
+use Libraries.Language.Compile.Parsing.QuorumParser
+use Libraries.Language.Compile.Context.StartContext
+use Libraries.Language.Compile.CompilerErrorManager
+use Libraries.Data.Formats.JavaScriptObjectNotation
+use Libraries.Game.Game
+use Libraries.Interface.Controls.Blocks.Block
+use Libraries.Interface.Layouts.ManualLayout
+use Libraries.Interface.Controls.Blocks.CodeEditor
+use Libraries.Interface.Layouts.FlowLayout
+use Libraries.Interface.Controls.Button
+use Libraries.Interface.Controls.TextBox
+use Libraries.Interface.Behaviors.Behavior
+use Libraries.Interface.Events.BehaviorEvent
+use Libraries.Game.Graphics.Drawable
+use Libraries.Game.Graphics.Color
+use Libraries.Containers.Array
+use Libraries.Interface.Options.LightBlockOptions
+use Libraries.Game.InputTable
+use Libraries.Game.InputSet
+use Libraries.Interface.Options.DarkBlockOptions
+use Libraries.Interface.Events.TextChangeListener
+use Libraries.Interface.Events.TextChangeEvent
+use Libraries.Game.Graphics.Font
+use Libraries.Interface.Behaviors.Blocks.CodeEditorSelectionDownBehavior
+use Libraries.Interface.Events.KeyboardEvent
+use Libraries.Interface.Behaviors.Blocks.CodeEditorSelectionUpBehavior
+use Libraries.Interface.Behaviors.Blocks.CodeEditorSelectNextBehavior
+use Libraries.Interface.Behaviors.Blocks.CodeEditorSelectPreviousBehavior
+use Libraries.Interface.Behaviors.Blocks.CodeEditorEscapeBehavior
+use Libraries.Interface.Behaviors.Controls.ScrollBarDragBehavior
+use Libraries.Interface.Behaviors.Controls.ScrollableControlMouseScrollBehavior
+use Libraries.Language.Compile.Blocks.ParserToBlockListener
+use Libraries.Interface.Behaviors.Blocks.CodeEditorNewLineBehavior
+use Libraries.Interface.Behaviors.Blocks.CodeEditorDeleteBlockBehavior
+use Libraries.Interface.Behaviors.Blocks.CodeEditorFreeformEditingBehavior
+use Libraries.Language.Compile.Parsing.FormatListener
+use Libraries.Game.GameStateManager
+use Libraries.Interface.Behaviors.Blocks.CodeEditorUndoBehavior
+use Libraries.Interface.Behaviors.Blocks.CodeEditorRedoBehavior
+use Libraries.Interface.Controls.Blocks.BlockSelectionListener
+use Libraries.Language.Compile.Parsing.TokenIterator
+use Libraries.Language.Compile.Parsing.Token
+use Libraries.Game.WebConfiguration
+use Libraries.Interface.Controls.Control
+use Libraries.Game.DesktopConfiguration
+use Libraries.Interface.Controls.Icon
+use Libraries.Interface.Controls.Blocks.Palette.BlockPalette
+use Libraries.Game.Graphics.Fonts.FontManager
+use Libraries.Interface.Accessibility
+use Libraries.Interface.Layouts.LayoutProperties
+use Libraries.Game.WebApplication
+use WebEditor.Behaviors.all
+use Libraries.Interface.Events.GestureEvent
+use Libraries.Interface.Behaviors.Controls.ControlActivationBehavior
+use Libraries.Interface.Accessibility.WebAccessibility
+use Libraries.Interface.Events.WebAccessibilityListener
+use Libraries.Interface.Events.WebAccessibilityEvent
+use Libraries.Interface.Item
+use Libraries.Interface.Events.FocusListener
+use Libraries.Interface.Events.FocusEvent
+use Libraries.Interface.Behaviors.Blocks.BlockPickUpBehavior
+use Libraries.Interface.Options.InterfaceOptions
+use Libraries.Interface.Controls.TabPane
+use Libraries.Interface.Controls.Tab
+use Libraries.Interface.Events.SelectionListener
+use Libraries.Interface.Events.SelectionEvent
+use Libraries.Interface.Selections.TabPaneSelection
+use Libraries.Containers.HashTable
+use Libraries.Interface.Item2D
+use Libraries.Game.Layer2D
+use Libraries.Interface.Views.ControlShaderView
+
+class BlockEditor is Game, Behavior, TextChangeListener, WebAccessibilityListener, FocusListener, SelectionListener
+
+    constant text CONTAINER_ID = "BlockUIContainer"
+    HashTable<CodeEditor, ParserToBlockListener> blockListeners
+    WebControlPanel palettePanel
+    Control palettePartition
+    WebControlPanel editorPanel
+    BlockPalette editorPalette = undefined
+    EditorItem paletteItem = undefined
+    EditorItem blocksItem = undefined
+    
+    boolean alwaysSupportMultipleFiles = false
+    
+    // If this editor only supports one file, this is the single editor.
+    // If it supports multiple, this is the editor for the currently active file.
+CodeEditor editor = undefined
+    
+    // A tab pane holding the editors for the different files. Only defined if the editor has multiple file support.
+    TabPane editorPane = undefined
+    
+    TextHighlightListener textHighlightListener
+    
+    system action GetTextForIDE(text containerID) returns text
+
+    system action GetPaletteFileName(text containerID) returns text
+    
+    system action RunGame
+    system action StopGame
+    system action UpdateTogglePaletteButton(boolean status)
+    system action ShowHelpModal
+    
+    action SupportsMultipleFiles returns boolean
+        if alwaysSupportMultipleFiles
+            return true
+        end
+        
+        // Returns true if the IDE has multiple files associated with it at this moment in time, or false otherwise.
+        return SupportsMultipleFilesNative(CONTAINER_ID)
+    end
+    
+    private system action SupportsMultipleFilesNative(text containerID) returns boolean
+    
+    //Get the text for all of the files associated with this IDE. Append them to the provided array. 
+    system action GetMultipleFileText(text containerID, Array<text> fileNames, Array<text> fileTexts)
+    
+action Main
+        WebConfiguration config = GetWebConfiguration()
+        config:title = "Block Editor"
+        config:containerID = CONTAINER_ID
+        config:convertTouchToMouseEvents = false
+        SetConfiguration(config)
+        DesktopConfiguration deskConfig = GetDesktopConfiguration()
+        deskConfig:resizable = true
+    StartGame()
+end
+    
+    action OnExit returns boolean
+        editor = undefined
+palettePanel = undefined
+    palettePartition = undefined
+    editorPanel = undefined
+    editorPalette = undefined
+    paletteItem = undefined
+    blocksItem = undefined
+        if editorPane not= undefined
+            editorPane:Empty()
+        end
+        editorPane = undefined
+        blockListeners:Empty()
+        return true
+    end
+    
+ action CreateGame
+        
+integer landmarkCount = 5
+        text extraNavigationText = ""
+        if SupportsMultipleFiles()
+            extraNavigationText = " or let you navigate between the code files"
+        end
+        
+        GameStateManager manager
+        WebAccessibility webAccess = cast(WebAccessibility, manager:GetAccessibility())
+webAccess:AddHiddenHeader("Navigation Area", "Navigation Menu, Landmark 1 of " + landmarkCount + ",
+ You are on the Navigation Menu, swipe right to find buttons that will take you directly to the tray or editor" + extraNavigationText + ". ")
+        webAccess:AddHiddenButton("Go To Tray")
+webAccess:AddHiddenButton("Go To Editor")
+webAccess:AddHiddenButton("Exit")
+        if SupportsMultipleFiles()
+webAccess:AddHiddenButton("Open Next File")
+        webAccess:AddHiddenButton("Open Previous File")
+        end
+webAccess:AddHiddenHeader("Block Control Area", "Block Control Menu, Landmark 2 of " + landmarkCount + ", 
+You are on the Block Control Menu, swipe right to find buttons to move blocks around or delete them.")
+        webAccess:AddHiddenButton("Pick Up Current")
+webAccess:AddHiddenButton("Move Placeholder Block Up")
+webAccess:AddHiddenButton("Move Placeholder Block Down")
+webAccess:AddHiddenButton("Drop Block")
+        webAccess:AddHiddenButton("Delete")
+        webAccess:AddHiddenHeader("Edit Area", "Edit Menu, Landmark 3 of " + landmarkCount + ", 
+You are on the Edit Menu, swipe right to find buttons to help you Undo and Redo in the block editor")
+        webAccess:AddHiddenButton("Undo")
+webAccess:AddHiddenButton("Redo")
+        webAccess:AddWebAccessibilityListener(me)
+        
+        SetupInterfaceOptions()
+        
+FlowLayout layout
+    SetLayout(layout)
+        
+integer fontSize = 12
+        if SupportsMultipleFiles() = false
+        CodeEditor editor2
+        editor = editor2
+        
+    ParserToBlockListener listener
+    listener:startLine = 0
+    editor:SetBlockListener(listener)
+    blockListeners:Add(editor, listener)
+            
+        editor:AddTextChangeListener(textHighlightListener)
+        textHighlightListener:SetEditor(editor)
+        text read = ""
+        read = GetTextForIDE(CONTAINER_ID)
+    
+    BlockSelectionListener listen
+    editor:SetPercentageWidth(1)
+    editor:SetPercentageHeight(1)
+    editor:SetFontSize(fontSize)
+    editor:AddSelectionListener(listen)
+        editor:SetCode(read)
+        else
+            TabPane tabPane
+            editorPane = tabPane
+            editorPane:AddSelectionListener(me)
+            
+            editorPane:SetPercentageWidth(1)
+            editorPane:SetPercentageHeight(1)
+            
+            Array<text> fileNames
+            Array<text> fileTexts
+            GetMultipleFileText(CONTAINER_ID, fileNames, fileTexts)
+            
+            integer i = 0
+            repeat while i < fileNames:GetSize()
+Tab tab
+                tab:SetName(fileNames:Get(i))
+                tab:DisplayCloseButton(false)
+                
+                CodeEditor newEditor
+                newEditor:SetName(fileNames:Get(i))
+                
+ParserToBlockListener listener
+            listener:startLine = 0
+newEditor:SetBlockListener(listener)
+            blockListeners:Add(newEditor, listener)
+                
+        newEditor:AddTextChangeListener(textHighlightListener)
+    text code = fileTexts:Get(i)
+    
+    BlockSelectionListener listen
+    newEditor:SetPercentageWidth(1)
+    newEditor:SetPercentageHeight(1)
+    newEditor:SetFontSize(fontSize)
+    newEditor:AddSelectionListener(listen)
+        newEditor:SetCode(code)
+                
+                if editor = undefined
+                    editor = newEditor
+                end
+                
+                tab:SetRelatedItem(newEditor)
+                editorPane:Add(tab)
+                i = i + 1
+            end
+        end
+    
+        
+        BlockPalette palette
+        palette:SetPercentageHeight(1)
+palette:SetPercentageWidth(1)
+        palette:SetEditor(editor)
+        
+        File customPalettePage
+        customPalettePage = GetPaletteFile()
+        if customPalettePage not= undefined
+            palette:AddCustomPalettePage(customPalettePage)
+        end
+        
+    Color color
+        FlowLayout panelFlow
+        panelFlow:SetSingleLine(true)
+palettePanel:SetLayout(panelFlow)
+        LayoutProperties panelProp = palettePanel:GetDefaultLayoutProperties()
+        //panelProp:SetHorizontalLayoutMode(palettePanel:FIT_CONTENTS)
+        palettePanel:SetPercentageX(0)
+        palettePanel:SetPercentageY(0)
+        palettePanel:SetPercentageHeight(1)
+        palettePanel:SetPixelWidth(200)
+        palettePanel:SetName("Palette Panel")
+        palettePanel:SetAccessibilityCode(9)
+        palettePanel:SetFocusable(false)
+ControlShaderView palettePanelView
+        palettePanelView:Initialize()
+        palettePanel:SetView2D(palettePanelView)
+        
+        FlowLayout flow
+        editorPanel:SetLayout(flow)
+editorPanel:SetPercentageY(0)
+        editorPanel:SetPercentageHeight(1)
+        editorPanel:SetPercentageOriginX(-0.01)
+        editorPanel:SetHorizontalLayoutMode(editorPanel:parent:Control:FILL)
+editorPanel:SetName("Editor Panel")
+editorPanel:SetAccessibilityCode(9)
+        editorPanel:SetFocusable(false)
+ControlShaderView editorPanelView
+        editorPanelView:Initialize()
+        editorPanel:SetView2D(editorPanelView)
+        
+        webAccess:AddHiddenHeader("paletteHeader", "Block Tray, Landmark 4 of " + landmarkCount + ", You are on the Block Tray Header, 
+swipe right to find the items in the block tray, swipe left and you will find the other menus.
+ Navigation by headings is recommended if you want to find other landmarks.", true)
+        webAccess:AddHiddenLabel("paletteLabel", "Block Tray Help. Activate or double tap an item in the tray to insert into the text. 
+Landmark 2 will point you to buttons that can help move the activated tray item in the editor.", true)
+        Add(palettePanel)
+        palettePanel:Add(palette)
+        palette:IncludeSuggestions(false)
+        palette:Setup()
+        
+        Control palettePartition = CreatePalettePartition()
+        Add(palettePartition)
+        AddPartitionInputTable(palettePanel)
+        
+webAccess:AddHiddenHeader("editorHeader", "Code Editor, Landmark 5 of " + landmarkCount + ", You are on the Code Editor Header, 
+swipe right to find the items in the code editor, swipe left and you will find the tray.
+ Navigation by headings is recommended if you want to find other landmarks.", true)
+        Add(editorPanel)
+        if editorPane not= undefined
+            editorPanel:Add(editorPane)
+        else
+editorPanel:Add(editor)
+        end
+        
+        CanvasResizeListener resizeListener
+        resizeListener:AddPanel(palettePanel)
+        resizeListener:AddPanel(editorPanel)
+        AddResizeListener(resizeListener)
+        me:editorPalette = palette
+        SetupEditorItems()
+resizeListener:AddPanel(paletteItem)
+        AddDefaultKeys()
+        paletteItem:Focus()
+        AddFocusListener(me)
+SetInterfaceScale(1.25)
+        SetColliding(false)
+        
+        if editorPane not= undefined and editorPane:IsEmpty() = false
+            // Select the first tab if we have multiple file support enabled.
+            editorPane:Select(0)
+        end
+end
+    
+    action SetupEditorItems
+        Layer2D editorItemLayer
+        FlowLayout editorItemLayout
+        editorItemLayer:SetLayout(editorItemLayout)
+GameStateManager manager
+        WebApplication webApp = cast(WebApplication, manager:GetApplication())
+        if webApp:GetWebOperatingSystem():Contains("Android") or webApp:GetWebOperatingSystem():Contains("iOS")
+ or webApp:GetWebOperatingSystem():Contains("Mobile")
+EditorItem tempPalette
+        paletteItem = tempPalette
+        paletteItem:SetName("Block Editor, You are in the Block Editor.
+ If you are using a mobile screen reader navigation by headings is recommended. You will find 5 landmarks corresponding
+ to 3 menus, the block tray, and then the block editor. Swipe Left and Right to navigate item by item.
+ Swipe up and down to navigate by landmarks.")
+            Add(paletteItem)
+            return now
+        end
+        EditorItem tempPalette
+        paletteItem = tempPalette
+        paletteItem:SetName("Tray, To navigate to the tray press Enter. To navigate to the editor use the arrow keys. To navigate back to here from the tray press Shift+Enter.")
+paletteItem:SetPercentageX(0)
+        paletteItem:SetPercentageY(0)
+        paletteItem:SetPercentageHeight(1)
+        paletteItem:SetPixelWidth(200)
+        paletteItem:SetZ(100)
+        
+        EditorItem tempBlocks
+        blocksItem = tempBlocks
+        blocksItem:SetName("Block Editor, To navigate to the editor press Enter. To navigate to the tray use the arrow keys. To navigate back to here from the editor press Shift+Enter.")
+blocksItem:SetPercentageY(0)
+        blocksItem:SetPercentageHeight(1)
+        blocksItem:SetZ(100)
+        LayoutProperties blockItemProperties = blocksItem:GetDefaultLayoutProperties()
+        blockItemProperties:SetHorizontalLayoutMode(blockItemProperties:FILL)
+        
+        
+paletteItem:SetNextFocus(blocksItem)
+        paletteItem:SetPreviousFocus(blocksItem)
+        blocksItem:SetNextFocus(paletteItem)
+        blocksItem:SetPreviousFocus(paletteItem)
+        
+blocksItem:SetTarget(GetBlockEditor())
+        blocksItem:SetPanel(editorPanel)
+paletteItem:SetTarget(GetBlockPalette())
+        paletteItem:SetPanel(palettePanel)
+        
+        
+        editorItemLayer:Add(paletteItem)
+        editorItemLayer:Add(blocksItem)
+        AddLayer(0, editorItemLayer)
+    end
+    
+    action AddDefaultKeys
+        KeyboardEvent keys
+InputTable defaultTable = GetDefaultInputTable()
+        // Mac has different keys
+        isMac = false
+GameStateManager manager
+        WebApplication webApp = cast(WebApplication, manager:GetApplication())
+        if webApp:GetWebOperatingSystem():Contains("Mac")
+            isMac = true
+        end
+        // Creating input sets for the default focus behaviors.
+        InputSet focusPalette
+        focusPalette:SetKeyboardInput(keys:NUM_1)
+        if isMac
+                                focusPalette:AddModifier(focusPalette:CONTROL)
+        else
+            focusPalette:AddModifier(focusPalette:ALT)
+        end
+        FocusPaletteBehavior focusPaletteBehavior
+        defaultTable:Add(focusPalette, focusPaletteBehavior)
+        
+        
+InputSet focusBlocks
+        focusBlocks:SetKeyboardInput(keys:NUM_2)
+        if isMac
+                    focusBlocks:AddModifier(focusBlocks:CONTROL)
+        else
+            focusBlocks:AddModifier(focusBlocks:ALT)
+        end
+        FocusEditorBehavior focusEditorBehavior
+        defaultTable:Add(focusBlocks, focusEditorBehavior)
+        
+InputSet runSet
+        runSet:SetKeyboardInput(keys:R)
+        runSet:AddModifier(runSet:SHIFT)
+if isMac
+                    runSet:AddModifier(runSet:CONTROL)
+        else
+runSet:AddModifier(runSet:ALT)
+        end
+        RunGameBehavior runBehavior
+        defaultTable:Add(runSet, runBehavior)
+        
+InputSet stopSet
+        stopSet:SetKeyboardInput(keys:S)
+        stopSet:AddModifier(runSet:SHIFT)
+if isMac
+                    stopSet:AddModifier(runSet:CONTROL)
+        else
+stopSet:AddModifier(runSet:ALT)
+        end
+        StopGameBehavior stopBehavior
+        defaultTable:Add(stopSet, stopBehavior)
+        
+InputSet togglePaletteSet
+        togglePaletteSet:SetKeyboardInput(keys:X)
+        togglePaletteSet:AddModifier(runSet:SHIFT)
+if isMac
+                    togglePaletteSet:AddModifier(togglePaletteSet:CONTROL)
+        else
+togglePaletteSet:AddModifier(togglePaletteSet:ALT)
+        end
+        TogglePaletteBehavior toggleBehavior
+        defaultTable:Add(togglePaletteSet, toggleBehavior)
+        
+InputSet showHelpSet
+        showHelpSet:SetKeyboardInput(keys:H)
+        showHelpSet:AddModifier(runSet:SHIFT)
+if isMac
+                    showHelpSet:AddModifier(togglePaletteSet:CONTROL)
+        else
+showHelpSet:AddModifier(togglePaletteSet:ALT)
+        end
+        ShowHelpModalBehavior helpBehavior
+        defaultTable:Add(showHelpSet, helpBehavior)
+        
+InputSet zoomInSet
+        zoomInSet:SetKeyboardInput(keys:EQUALS)
+if isMac
+                    zoomInSet:AddModifier(zoomInSet:CONTROL)
+        else
+zoomInSet:AddModifier(zoomInSet:ALT)
+        end
+        ZoomBehavior zoomInBehavior
+        zoomInBehavior:SetToZoomIn()
+        defaultTable:Add(zoomInSet, zoomInBehavior)
+        
+InputSet zoomOutSet
+        zoomOutSet:SetKeyboardInput(keys:MINUS)
+if isMac
+                    zoomOutSet:AddModifier(zoomOutSet:CONTROL)
+        else
+zoomOutSet:AddModifier(zoomOutSet:ALT)
+        end
+        ZoomBehavior zoomOutBehavior
+        zoomOutBehavior:SetToZoomOut()
+        defaultTable:Add(zoomOutSet, zoomOutBehavior)
+        
+InputTable editorTable
+        editorTable:SetIdentifier("EditorItem")
+        InputSet focusTargetSet
+        focusTargetSet:SetKeyboardInput(keys:ENTER)
+        EditorItemFocusTargetBehavior focusTargetBehavior
+        editorTable:Add(focusTargetSet, focusTargetBehavior)
+        
+        InputSet left
+        left:SetKeyboardInput(keys:LEFT)
+        
+        InputSet right
+        right:SetKeyboardInput(keys:RIGHT)
+        
+        InputSet up
+        up:SetKeyboardInput(keys:UP)
+        
+        InputSet down
+        down:SetKeyboardInput(keys:DOWN)
+        
+        EditorItemFocusNext focusNext
+        EditorItemFocusPrevious focusPrevious
+        editorTable:Add(up, focusNext)
+editorTable:Add(right, focusNext)
+editorTable:Add(left, focusPrevious)
+editorTable:Add(down, focusPrevious)
+        AddInputTable(editorTable)
+        
+        InputSet focusEditorItemSet
+        focusEditorItemSet:SetKeyboardInput(keys:ENTER)
+        focusEditorItemSet:AddModifier(focusEditorItemSet:SHIFT)
+        FocusEditorItemBehavior focusEditorItemBehavior
+        focusEditorItemBehavior:SetPaletteItem(paletteItem)
+        focusEditorItemBehavior:SetBlocksItem(blocksItem)
+        defaultTable:Add(focusEditorItemSet,focusEditorItemBehavior)
+        
+        
+InputSet swipeSet
+        GestureEvent gestures
+        swipeSet:SetGestureInput(gestures:SWIPE)
+
+        InputSet tapSet
+        tapSet:SetGestureInput(gestures:SINGLE_TAP)
+
+        InputSet doubleTapSet
+        doubleTapSet:SetGestureInput(gestures:DOUBLE_TAP)
+
+        InputSet panBeginSet
+        panBeginSet:SetGestureInput(gestures:PAN)
+        panBeginSet:SetInputTrigger(panBeginSet:BEGIN)
+InputSet panContinueSet
+        panContinueSet:SetGestureInput(gestures:PAN)
+        panContinueSet:SetInputTrigger(panContinueSet:CONTINUE)
+InputSet panEndSet
+        panEndSet:SetGestureInput(gestures:PAN)
+        panEndSet:SetInputTrigger(panEndSet:FINISH)
+
+        InputSet longPressSet
+        longPressSet:SetGestureInput(gestures:LONG_PRESS)
+
+        InputSet pinchSet
+        pinchSet:SetGestureInput(gestures:PINCH)
+        
+        WebEditorSwipeBehavior swipeBehavior
+        defaultTable:Add(swipeSet, swipeBehavior)
+        
+        WebEditorDoubleTapBehavior doubleTapBehavior
+        defaultTable:Add(doubleTapSet, doubleTapBehavior)
+        
+        WebEditorLongPressBehavior longPressBehavior
+        defaultTable:Add(longPressSet, longPressBehavior)
+        
+        WebEditorSingleTapBehavior singleTapBehavior
+        defaultTable:Add(tapSet, singleTapBehavior)
+        
+        WebEditorPanBehavior panBehavior
+        defaultTable:Add(panBeginSet, panBehavior)
+defaultTable:Add(panContinueSet, panBehavior)
+defaultTable:Add(panEndSet, panBehavior)
+        
+    end
+    
+ action Format(text source) returns text
+    CompilerErrorManager manager
+    QuorumLexer lexer
+    lexer:SetIgnoreWhiteSpace(false)
+    lexer:SetCompilerErrorManager(manager)
+    lexer:Read(source)
+    
+    if not manager:IsCompilationErrorFree()
+        text value = manager:GetCompilerErrorsAsText()
+            output value
+        return source
+    end
+    QuorumParser parser
+    parser:SetCompilerErrorManager(manager)
+    parser:SetLexer(lexer)
+    StartContext start = parser:Start()
+    if not manager:IsCompilationErrorFree()
+        text value = manager:GetCompilerErrorsAsText()
+            output value
+        return source
+    end
+    FormatListener formatter
+    formatter:SetQuorumLexer(lexer)
+    formatter:SetSource(source)
+    start:Traverse(formatter)
+    
+     text formatted = formatter:GetSourceFormatted()
+    return formatted
+end
+    
+    
+action CreatePalettePartition returns Control
+        Icon palettePartition
+Color bgColor
+        bgColor:SetColor(0.25,0.25,0.25,1)
+        palettePartition:LoadFilledRectangle(4,500, bgColor)
+        LayoutProperties paletteProperties = palettePartition:GetDefaultLayoutProperties()
+        paletteProperties:SetPixelWidth(8)
+        paletteProperties:SetVerticalLayoutMode(paletteProperties:FILL)
+        
+        palettePartition:SetInputGroup("PalettePartition")
+        palettePartition:SetName("Tray Pane Partition")
+        palettePartition:SetZ(10)
+        return palettePartition
+    end
+    
+    action AddPartitionInputTable(Control palettePanel)
+InputTable palettePartitionTable
+        palettePartitionTable:SetIdentifier("PalettePartition")
+        
+        InputSet dragSet
+        dragSet:SetDragItemInput()
+        InputSet dragContinueSet = dragSet:Copy()
+        dragContinueSet:SetInputTrigger(dragContinueSet:CONTINUE)
+        PalettePartitionDragBehavior paletteDrag
+        paletteDrag:SetPanel(palettePanel)
+        
+        palettePartitionTable:Add(dragSet, paletteDrag)
+palettePartitionTable:Add(dragContinueSet, paletteDrag)
+        AddInputTable(palettePartitionTable)
+        
+    end
+    
+    action GetPaletteFile returns File
+        File file
+        if GetPaletteFileName(CONTAINER_ID) not= ""
+            file:SetPath(GetPaletteFileName(CONTAINER_ID))
+            return file
+        end
+        return undefined
+    end
+    
+    action FocusChanged(WebAccessibilityEvent event)
+        text elementName = event:elementName
+GameStateManager manager
+        WebAccessibility webAccess = cast(WebAccessibility, manager:GetAccessibility())
+        if elementName = "Go To Tray"
+            editorPalette:Focus()
+        elseif elementName = "Go To Editor"
+            editor:Focus()
+elseif elementName = "Pick Up Current"
+if not editor:IsKeyboardMovingBlocks()
+                BehaviorEvent pickUpEvent
+                        pickUpEvent:SetItem(editor:GetSelectedBlocks():Get(0))
+                text blockName = editor:GetSelectedBlocks():Get(0):GetName()
+                BlockPickUpBehavior pickUpBehavior
+                pickUpBehavior:Run(pickUpEvent)
+                webAccess:ModifyHiddenSlider("Block Mover", 0, editor:GetLineCount() - 1, 1)
+                webAccess:SetHiddenSliderCurrentValue("Block Mover", editor:GetSelection():GetLine())
+                webAccess:SetHiddenSliderValueText("Block Mover", blockName)
+                webAccess:FocusHiddenElement("Block Mover")
+end
+        elseif elementName = "Move Placeholder Block Down"
+            if editor:IsKeyboardMovingBlocks()
+                editor:MoveSelectionDown()
+                webAccess:FocusHiddenElement("Move Placeholder Block Down")
+            end
+elseif elementName = "Move Placeholder Block Up"
+if editor:IsKeyboardMovingBlocks()
+                editor:MoveSelectionUp()
+webAccess:FocusHiddenElement("Move Placeholder Block Up")
+            end
+        elseif elementName = "Drop Block"
+if editor:IsKeyboardMovingBlocks()
+                editor:ConfirmKeyboardMovingBlocks()
+end
+elseif elementName = "Delete"
+            editor:DeleteSelectedBlock(false)
+            editor:Focus()
+elseif elementName = "Undo"
+            editor:GetBlockEditManager():Undo()
+editor:Focus()
+elseif elementName = "Redo"
+editor:GetBlockEditManager():Redo()
+editor:Focus()
+        elseif elementName = "Exit"
+            webAccess:ForceReleaseFocus()
+elseif elementName = "Move Up"
+            editor:MoveSelectionUp()
+editor:Focus()
+elseif elementName = "Move Down"
+editor:MoveSelectionDown()
+editor:Focus()
+        elseif elementName = "Open Next File"
+            if editorPane not= undefined
+                TabPaneSelection select = editorPane:GetSelection()
+                integer index = (select:GetIndex() + 1) mod editorPane:GetSize()
+                editorPane:Select(index)
+webAccess:FocusHiddenElement("Open Next File")
+            end
+        elseif elementName = "Open Previous File"
+if editorPane not= undefined
+                TabPaneSelection select = editorPane:GetSelection()
+                integer index = select:GetIndex() - 1
+                if index < 0
+                    index = editorPane:GetSize() - 1
+                end
+                editorPane:Select(index)
+webAccess:FocusHiddenElement("Open Previous File")
+            end
+        end
+        
+    end
+    
+    action SliderChanged(WebAccessibilityEvent event)
+        text elementName = event:GetElementName()
+GameStateManager manager
+        WebAccessibility webAccess = cast(WebAccessibility, manager:GetAccessibility())
+        if elementName = "Block Mover"
+            editor:SelectBlockAtLine(event:GetSliderValue())
+text blockName = editor:GetSelectedBlocks():Get(0):GetName()
+            webAccess:SetHiddenSliderValueText("Block Mover", blockName)
+webAccess:FocusHiddenElement("Block Mover")
+        end
+    end
+    
+    action HiddenElementClicked(WebAccessibilityEvent event)
+        Item clicked = event:GetItem()
+        if clicked is Block
+            if editor:IsKeyboardMovingBlocks()
+                editor:ConfirmKeyboardMovingBlocks()
+            end
+        end
+    end
+    
+action GainedFocus(FocusEvent event)
+end
+
+    action LostFocus(FocusEvent event)
+
+    end
+    
+action IsInPalette(Item item) returns boolean
+        repeat until item = undefined
+            if item is BlockPalette
+                return true
+            else
+                item = item:GetAccessibleParent()
+            end
+        end
+        return false
+    end
+    
+    action IsInBlockEditor(Item item) returns boolean
+repeat until item = undefined
+            if item is CodeEditor
+                return true
+            else
+                item = item:GetAccessibleParent()
+            end
+        end
+        return false
+    end
+    
+    action SetCode(text code)
+        me:editor:SetCode(code)
+    end
+    
+    number scaleAmount = 0.2
+    action ScaleUp
+number scale = GetInterfaceScale()
+            scale = scale + scaleAmount
+
+        if scale >= 0.1
+            SetInterfaceScale(scale)
+    end
+    end
+    
+    action ScaleDown
+number scale = GetInterfaceScale()
+            scale = scale - scaleAmount
+        if scale >= 0.1
+            SetInterfaceScale(scale)
+    end
+    end
+    
+    number lastWidth = 0
+    action TogglePalette returns boolean
+        if palettePanel:IsShowing()
+            lastWidth = palettePanel:GetPixelWidth()
+            palettePanel:SetPixelWidth(0)
+            palettePanel:Hide()
+            palettePartition:Hide()
+            editor:Focus()
+palettePanel:RequestLayout()
+            return false
+        else
+            palettePanel:Show()
+            palettePartition:Show()
+            palettePanel:SetPixelWidth(lastWidth)
+palettePanel:RequestLayout()
+            return true
+        end
+    end
+    
+    action IsPaletteShowing returns boolean
+        return palettePanel:IsShowing()
+    end
+    
+    action GetBlockEditor returns CodeEditor
+        return me:editor
+    end
+    
+    action GetBlockPalette returns BlockPalette
+        return me:editorPalette
+    end
+
+action Update(number seconds)
+    if textHighlightListener not= undefined
+            textHighlightListener:Update(seconds)
+        end
+end
+    
+    // For now, only light mode is supported, so this is always true. If dark mode is supported later, then this should return false.
+    action IsLightMode returns boolean
+        return true
+    end
+    
+    action SetupInterfaceOptions
+InterfaceOptions options = undefined
+        Color color
+        number MAX = 255.0
+        if IsLightMode()
+LightBlockOptions lightOptions
+            options = lightOptions
+            
+            Color keywords = color:CustomColor(8.0 / MAX, 57.0 / MAX, 181.0 / MAX, 1)
+Color comments = color:CustomColor(68.0 / MAX, 80.0 / MAX, 91.0 / MAX, 1)
+        Color textColor = color:CustomColor(160.0 / MAX, 50.0 / MAX, 50.0 / MAX, 1)
+        Color structure = color:CustomColor(113.0 / MAX, 83.0 / MAX, 38.0 / MAX, 1)
+            
+options:SetColorProperty(textHighlightListener:EDITOR_KEYWORD_COLOR, keywords)
+        options:SetColorProperty(textHighlightListener:EDITOR_STRUCTURE_COLOR, structure)
+        options:SetColorProperty(textHighlightListener:EDITOR_TEXT_COLOR, textColor)
+        options:SetColorProperty(textHighlightListener:EDITOR_COMMENT_COLOR, comments)
+        else
+            DarkBlockOptions darkOptions
+            options = darkOptions
+            
+Color keywords = color:CustomColor(144.0 / MAX, 191.0 / MAX, 227.0 / MAX, 1)
+Color comments = color:CustomColor(175.0 / MAX, 186.0 / MAX, 255.0 / MAX, 1)
+        Color textColor = color:CustomColor(255.0 / MAX, 165.0 / MAX, 127.0 / MAX, 1)
+        Color structure = color:CustomColor(207.0 / MAX, 175.0 / MAX, 224.0 / MAX, 1)
+            
+options:SetColorProperty(textHighlightListener:EDITOR_KEYWORD_COLOR, keywords)
+        options:SetColorProperty(textHighlightListener:EDITOR_STRUCTURE_COLOR, structure)
+        options:SetColorProperty(textHighlightListener:EDITOR_TEXT_COLOR, textColor)
+        options:SetColorProperty(textHighlightListener:EDITOR_COMMENT_COLOR, comments)
+        end
+    SetInterfaceOptions(options)
+    end
+    
+action SelectionChanged(SelectionEvent event)
+if event:GetSelection() is TabPaneSelection
+            TabPaneSelection selection = cast(TabPaneSelection, event:GetSelection())
+            Tab tab = selection:GetTab()
+            if tab not= undefined and tab:GetRelatedItem() is CodeEditor
+                CodeEditor editor = cast(CodeEditor, tab:GetRelatedItem())
+                me:editor = editor
+                textHighlightListener:SetEditor(editor)
+                
+                editorPalette:SetEditor(editor)
+            end
+        end
+    end
+    
+    action SetAlwaysSupportMultipleFiles(boolean support)
+alwaysSupportMultipleFiles = support
+    end
+    
+    action AlwaysSupportMultipleFiles returns boolean
+        return alwaysSupportMultipleFiles
+    end
+    
+    // Returns how many code files this IDE has. If the IDE hasn't been started yet, this will return 0.
+    action GetFileCount returns integer
+        if editorPane not= undefined
+            return editorPane:GetSize()
+        elseif editor not= undefined
+            return 1
+        else
+            return 0
+        end
+    end
+    
+    // Gets the code associated with the file at the provided index. If this IDE doesn't support multiple files, index 0 is still valid for the single editor.
+    action GetCodeAtFileIndex(integer index) returns text
+        if editorPane = undefined and editor not= undefined
+            if index not= 0
+                alert("Can't access a file at index " + index + " -- this IDE doesn't support multiple files.")
+            else
+                return editor:GetText()
+            end
+        elseif editorPane not= undefined
+            Array<Tab> tabs = editorPane:GetTabs()
+            Item2D item = tabs:Get(index):GetRelatedItem()
+            if item is CodeEditor
+                CodeEditor currentEditor = cast(CodeEditor, item)
+                return currentEditor:GetText()
+            else
+                alert("I couldn't read from index " + index + " because it wasn't a CodeEditor.")
+            end
+        end
+        
+        return ""
+    end
+    
+    // Gets the name of the file at the provided index. If this IDE doesn't support multiple files, index 0 is still valid for the single editor, and always returns "Main.quorum"
+    action GetNameAtFileIndex(integer index) returns text
+if editorPane = undefined and editor not= undefined
+            if index not= 0
+                alert("Can't access a file at index " + index + " -- this IDE doesn't support multiple files.")
+            else
+                return "Main.quorum"
+            end
+        elseif editorPane not= undefined
+            Array<Tab> tabs = editorPane:GetTabs()
+            return tabs:Get(index):GetName()
+        end
+        
+        return ""
+    end
+    
+end
