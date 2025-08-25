@@ -86,15 +86,30 @@ function App() {
       if (!toolboxXml) {
         const defaultToolboxXml = `
         <xml xmlns="https://developers.google.com/blockly/xml">
-          <category name="Quorum Blocks" colour="#5C81A6">
-            <block type="output"></block>
-            <block type="variable_declare"></block>
-            <block type="if_block"></block>
-            <block type="repeat_block"></block>
-          </category>
-          <category name="Logic" categorystyle="logic_category"></category>
-          <category name="Loops" categorystyle="loop_category"></category>
-        </xml>
+  <block type="controls_if">
+    <value name="IF0">
+      <block type="logic_boolean">
+        <field name="BOOL">TRUE</field>
+      </block>
+    </value>
+    <statement name="DO0">
+      <block type="output">
+        <field name="TEXT">hi</field>
+        <next>
+          <block type="output">
+            <field name="TEXT">world</field>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <next>
+      <block type="output">
+        <field name="TEXT">done</field>
+      </block>
+    </next>
+  </block>
+</xml>
+
 
       `;
         // Create a new DOM element to inject the default toolbox
@@ -331,22 +346,24 @@ function App() {
             Clear Blocks
           </button>
           <button
-            onClick={() => {
-              if (workspaceRef.current) {
-                const code = javascriptGenerator.workspaceToCode(workspaceRef.current);
-                console.log("Generated code:\n", code);
-                try {
-                  // eslint-disable-next-line no-eval
-                  eval(code);
-                } catch (e) {
-                  console.error("Error running code:", e);
-                  alert("Runtime error: " + e.message);
-                }
+            onClick={async () => {
+              try {
+                const code = cmView.current
+                  ? cmView.current.state.doc.toString()
+                  : "";
+                const response = await axios.post("http://localhost:5001/run", { code });
+                console.log("Run output:", response.data);
+                alert("Program output:\n" + response.data.output);
+              } catch (err) {
+                console.error("Run error:", err);
+                alert("Failed to run program");
               }
             }}
+            style={{ padding: "8px 12px", fontWeight: 600 }}
           >
             Run
           </button>
+
 
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <label>Braille Table:</label>

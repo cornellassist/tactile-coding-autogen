@@ -17,31 +17,53 @@ from flask_cors import CORS
 
 # Setup Flask app to handle translation requests
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-# Translation function for Flask
-@app.route('/translate', methods=['POST'])
+# --- Translation endpoint
+@app.route('/translate', methods=['POST', 'OPTIONS'])
 def translate():
-    data = request.get_json()  # Get JSON data from frontend
-    print("Received data:", data)  # Add a print statement for debugging
-    
-    code = data.get('code')
-    params = data.get('params', {})
-    language = data.get('language', 'quorum')  # Optional, default to 'quorum'
+    if request.method == "OPTIONS":
+        return '', 200  # CORS preflight
 
-    if 'table' not in params or 'file_name' not in params:
-        return jsonify({"error": "Missing required parameters: 'table' or 'file_name'"}), 400
+    if not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
+
+    data = request.get_json()
+    code = data.get('code', "")
+    params = data.get('params', {})
+    language = data.get('language', 'quorum')
 
     if language == "quorum":
         translation = quorum_to_blocks(code)
-        print("Returning blocks:", translation)
         return jsonify({"blocks": translation})
     else:
         if 'table' not in params or 'file_name' not in params:
             return jsonify({"error": "Missing required parameters"}), 400
         translation = louis_translate(code, params['table'], params['file_name'])
-        print("Returning blocks:", translation)
         return jsonify({"blocks": translation})
+
+# --- Run endpoint
+@app.route('/run', methods=['POST', 'OPTIONS'])
+def run_code():
+    if request.method == "OPTIONS":
+        return '', 200
+
+    if not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
+
+    data = request.get_json()
+    code = data.get("code", "")
+
+    # Stub: just echo the code, later you can hook into an interpreter
+    output_lines = []
+    for line in code.splitlines():
+        line = line.strip()
+        if line.startswith("output"):
+            msg = line[len("output"):].strip().strip('"')
+            output_lines.append(msg)
+
+    output = "\n".join(output_lines) if output_lines else f"Executed:\n{code}"
+    return jsonify({"output": output})
 
 # Run Flask app in a separate thread to avoid blocking wxPython GUI
 def run_flask():
