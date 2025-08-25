@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import * as Blockly from 'blockly';
+import * as Blockly from "blockly";
+import { javascriptGenerator } from "blockly/javascript";
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
+import { indentWithTab } from "@codemirror/commands";
+import { keymap } from "@codemirror/view";
 
 function App() {
   const workspaceRef = useRef(null);
@@ -16,37 +19,60 @@ function App() {
   const defineBlocks = () => {
     if (Blockly.Blocks['quorum_statement'] || Blockly.Blocks['output']) {
       console.log("Blocks are already defined.");
-      return;  // Skip re-defining the blocks
+      return;
     }
 
-    try {
-      console.log("Defining blocks...");
-      Blockly.defineBlocksWithJsonArray([
-        {
-          type: "quorum_statement",
-          message0: "statement %1",
-          args0: [{ type: "field_input", name: "CODE", text: "" }],
-          previousStatement: null,
-          nextStatement: null,
-          colour: 120,
-          tooltip: "Generic Quorum statement",
-        },
-        {
-          type: "output",
-          message0: "output %1",
-          args0: [{ type: "field_input", name: "TEXT", text: "" }],
-          previousStatement: null,
-          nextStatement: null,
-          colour: 160,
-          tooltip: "Quorum output",
-        },
-      ]);
-      console.log("Blocks defined:", Object.keys(Blockly.Blocks));
-    } catch (e) {
-      console.warn("Blockly blocks already defined or failed:", e);
-    }
+    console.log("Defining blocks...");
+
+    // --- Define custom blocks
+    Blockly.defineBlocksWithJsonArray([
+      {
+        type: "output",
+        message0: "output %1",
+        args0: [{ type: "field_input", name: "TEXT", text: "" }],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 160,
+        tooltip: "Quorum output",
+      },
+      {
+        type: "variable_declare",
+        message0: "integer %1 = %2",
+        args0: [
+          { type: "field_input", name: "VAR", text: "x" },
+          { type: "field_input", name: "VALUE", text: "0" }
+        ],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 210,
+        tooltip: "Declare a variable",
+      },
+      {
+        type: "if_block",
+        message0: "if %1 then %2",
+        args0: [
+          { type: "field_input", name: "COND", text: "true" },
+          { type: "input_statement", name: "DO" }
+        ],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 60,
+        tooltip: "If statement",
+      },
+      {
+        type: "repeat_block",
+        message0: "repeat %1 times %2",
+        args0: [
+          { type: "field_input", name: "COUNT", text: "5" },
+          { type: "input_statement", name: "DO" }
+        ],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 120,
+        tooltip: "Repeat loop",
+      }
+    ]);
   };
-
 
   // --- Initialize Blockly workspace
   useEffect(() => {
@@ -61,14 +87,15 @@ function App() {
         const defaultToolboxXml = `
         <xml xmlns="https://developers.google.com/blockly/xml">
           <category name="Quorum Blocks" colour="#5C81A6">
-            <block type="quorum_statement">
-              <field name="CODE">// Write your Quorum code here</field>
-            </block>
-            <block type="output">
-              <field name="TEXT">hi</field>
-            </block>
+            <block type="output"></block>
+            <block type="variable_declare"></block>
+            <block type="if_block"></block>
+            <block type="repeat_block"></block>
           </category>
+          <category name="Logic" categorystyle="logic_category"></category>
+          <category name="Loops" categorystyle="loop_category"></category>
         </xml>
+
       `;
         // Create a new DOM element to inject the default toolbox
         const toolboxDom = Blockly.utils.xml.textToDom(defaultToolboxXml);
@@ -82,6 +109,8 @@ function App() {
         scrollbars: true,
         renderer: "thrasos",
       });
+
+      reloadPalette()
     }
 
     // Handle window resize to resize Blockly workspace
@@ -117,6 +146,7 @@ function App() {
           extensions: [
             basicSetup,
             javascript(),
+            keymap.of([indentWithTab]),
             EditorView.updateListener.of((update) => {
               if (update.docChanged && window.QUORUM_EDITOR) {
                 const code = update.state.doc.toString();
@@ -231,14 +261,24 @@ function App() {
         id="toolbox"
         style={{ display: "none" }}
         dangerouslySetInnerHTML={{
-          __html: `<xml>
-    <category name="Logic" categorystyle="logic_category"></category>
-    <category name="Loops" categorystyle="loop_category"></category>
-    <!-- Add your block categories here -->
-  </xml>` }}
+          __html: `<xml xmlns="https://developers.google.com/blockly/xml">
+      <category name="Quorum Blocks" colour="#5C81A6">
+        <block type="output">
+          <field name="TEXT">Hello world</field>
+        </block>
+        <block type="variable_declare">
+          <field name="VAR">x</field>
+          <field name="VALUE">5</field>
+        </block>
+        <block type="if_block">
+          <field name="COND">true</field>
+        </block>
+        <block type="repeat_block">
+          <field name="COUNT">5</field>
+        </block>
+      </category>
+    </xml>` }}
       />
-
-
       <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
         {/* Header */}
         <div
@@ -289,6 +329,23 @@ function App() {
             style={{ padding: "8px 12px" }}
           >
             Clear Blocks
+          </button>
+          <button
+            onClick={() => {
+              if (workspaceRef.current) {
+                const code = javascriptGenerator.workspaceToCode(workspaceRef.current);
+                console.log("Generated code:\n", code);
+                try {
+                  // eslint-disable-next-line no-eval
+                  eval(code);
+                } catch (e) {
+                  console.error("Error running code:", e);
+                  alert("Runtime error: " + e.message);
+                }
+              }
+            }}
+          >
+            Run
           </button>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

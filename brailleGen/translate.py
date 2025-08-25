@@ -5,8 +5,7 @@ import louis
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 def quorum_to_blocks(code_input: str) -> str:
-    root = Element("xml", xmlns="https://developers.google.com/blockly/xml")
-
+    root = Element("xml")
 
     for line in code_input.splitlines():
         line = line.strip()
@@ -16,21 +15,37 @@ def quorum_to_blocks(code_input: str) -> str:
         if line.startswith("output"):
             block = SubElement(root, "block", type="output")
             field = SubElement(block, "field", name="TEXT")
-            # capture text inside quotes
             msg = line[len("output"):].strip().strip('"')
             field.text = msg
+
+        elif line.startswith("integer"):
+            parts = line.split("=")
+            if len(parts) == 2:
+                decl = parts[0].strip().split()
+                if len(decl) >= 2:
+                    var_name = decl[1]
+                    value = parts[1].strip()
+                    block = SubElement(root, "block", type="variable_declare")
+                    var_field = SubElement(block, "field", name="VAR")
+                    var_field.text = var_name
+                    val_field = SubElement(block, "field", name="VALUE")
+                    val_field.text = value
+
+        elif line.startswith("if"):
+            block = SubElement(root, "block", type="if_block")
+            cond = line[len("if"):].strip()
+            if cond.endswith("then"):
+                cond = cond[:-len("then")].strip()
+            field = SubElement(block, "field", name="COND")
+            field.text = cond
+
         elif line.startswith("repeat"):
-            block = SubElement(root, "block", type="repeat")
-            field = SubElement(block, "field", name="TIMES")
-            # crude parse "repeat 5 times"
+            # repeat 5 times
+            block = SubElement(root, "block", type="repeat_block")
+            field = SubElement(block, "field", name="COUNT")
             parts = line.split()
             if len(parts) >= 2 and parts[1].isdigit():
                 field.text = parts[1]
-        else:
-            block = SubElement(root, "block", type="quorum_statement")
-            field = SubElement(block, "field", name="CODE")
-            field.text = line
-
     return tostring(root, encoding="unicode")
 
 
