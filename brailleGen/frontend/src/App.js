@@ -21,10 +21,7 @@ function App() {
       console.log("Blocks are already defined.");
       return;
     }
-
     console.log("Defining blocks...");
-
-    // --- Define custom blocks
     Blockly.defineBlocksWithJsonArray([
       {
         type: "output",
@@ -33,44 +30,27 @@ function App() {
         previousStatement: null,
         nextStatement: null,
         colour: 160,
-        tooltip: "Quorum output",
+        tooltip: "Quorum output"
       },
       {
-        type: "variable_declare",
-        message0: "integer %1 = %2",
-        args0: [
-          { type: "field_input", name: "VAR", text: "x" },
-          { type: "field_input", name: "VALUE", text: "0" }
-        ],
-        previousStatement: null,
-        nextStatement: null,
-        colour: 210,
-        tooltip: "Declare a variable",
-      },
-      {
-        type: "if_block",
-        message0: "if %1 then %2",
-        args0: [
-          { type: "field_input", name: "COND", text: "true" },
-          { type: "input_statement", name: "DO" }
-        ],
-        previousStatement: null,
-        nextStatement: null,
-        colour: 60,
-        tooltip: "If statement",
-      },
-      {
-        type: "repeat_block",
-        message0: "repeat %1 times %2",
-        args0: [
-          { type: "field_input", name: "COUNT", text: "5" },
-          { type: "input_statement", name: "DO" }
-        ],
+        type: "quorum_statement",
+        message0: "statement %1",
+        args0: [{ type: "field_input", name: "CODE", text: "" }],
         previousStatement: null,
         nextStatement: null,
         colour: 120,
-        tooltip: "Repeat loop",
+        tooltip: "Generic Quorum statement"
+      },
+      {
+        type: "comment",
+        message0: "// %1",
+        args0: [{ type: "field_input", name: "TEXT", text: "" }],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 60,
+        tooltip: "Comment"
       }
+      // For variables, math, loops, if → Blockly already has built-in blocks
     ]);
   };
 
@@ -277,20 +257,18 @@ function App() {
         style={{ display: "none" }}
         dangerouslySetInnerHTML={{
           __html: `<xml xmlns="https://developers.google.com/blockly/xml">
-      <category name="Quorum Blocks" colour="#5C81A6">
-        <block type="output">
-          <field name="TEXT">Hello world</field>
-        </block>
-        <block type="variable_declare">
-          <field name="VAR">x</field>
-          <field name="VALUE">5</field>
-        </block>
-        <block type="if_block">
-          <field name="COND">true</field>
-        </block>
-        <block type="repeat_block">
-          <field name="COUNT">5</field>
-        </block>
+      <category name="Logic" categorystyle="logic_category"></category>
+      <category name="Loops" categorystyle="loop_category"></category>
+      <category name="Math" categorystyle="math_category"></category>
+      <category name="Text" categorystyle="text_category"></category>
+      <category name="Lists" categorystyle="list_category"></category>
+      <category name="Variables" categorystyle="variable_category"></category>
+      <category name="Functions" categorystyle="procedure_category"></category>
+      <sep></sep>
+      <category name="Quorum Custom" colour="#5C81A6">
+        <block type="output"></block>
+        <block type="quorum_statement"></block>
+        <block type="comment"></block>
       </category>
     </xml>` }}
       />
@@ -363,8 +341,6 @@ function App() {
           >
             Run
           </button>
-
-
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <label>Braille Table:</label>
             <select value={selectedTable} onChange={handleTableChange}>
