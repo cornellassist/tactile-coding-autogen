@@ -70,6 +70,8 @@ def translate_and_generate():
 
     # Then generate SCAD + STL
     try:
+        block_type = "say" if "say" in code else "action"
+        generate_with_template(code, file_name, block_type=block_type)
         generate_with_template(code, file_name)
     except Exception as e:
         return jsonify({"error": f"Failed to generate files: {str(e)}"}), 500

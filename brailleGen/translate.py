@@ -49,6 +49,18 @@ def quorum_to_blocks(code_input: str) -> str:
             fld = SubElement(blk, "field", name="TEXT")
             fld.text = text[len("output"):].strip().strip('"')
             return blk
+        # say "msg"
+        if text.startswith("say"):
+            blk = Element("block", type="say")
+            fld = SubElement(blk, "field", name="TEXT")
+            fld.text = text[len("say"):].strip().strip('"')
+            return blk
+        # action "msg"
+        if text.startswith("action"):
+            blk = Element("block", type="action")
+            fld = SubElement(blk, "field", name="TEXT")
+            fld.text = text[len("action"):].strip().strip('"')
+            return blk
         # integer x = 5 / number y = 2
         if text.startswith("integer") or text.startswith("number"):
             parts = text.split("=", 1)
