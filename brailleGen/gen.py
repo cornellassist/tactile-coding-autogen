@@ -55,6 +55,37 @@ def wrap_text(text, chars_per_line):
 
     return lines
 
+def generate_with_template(text, file_name):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    template_path = os.path.join(base_dir, "templates", "action_block.scad")
+    scad_folder = os.path.join(base_dir, "scad files")
+    output_folder = os.path.join(base_dir, "output files")
+    os.makedirs(scad_folder, exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Read template
+    with open(template_path, "r", encoding="utf-8") as f:
+        scad_code = f.read()
+
+    injected = f'text_input = ["{text}"];'
+    scad_code = scad_code.replace("action", injected)
+
+    # Save to new SCAD file
+    scad_script_path = os.path.join(scad_folder, file_name + ".scad")
+    with open(scad_script_path, "w", encoding="utf-8") as f:
+        f.write(scad_code)
+
+    # Run OpenSCAD to export STL
+    openscad_executable = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"  # adjust per OS
+    subprocess.run([
+        openscad_executable,
+        "-o", os.path.join(output_folder, file_name + ".stl"),
+        scad_script_path
+    ], check=True)
+
+    add_block_to_palette(file_name)
+
+
 def generate(translation, cpl, bh, ph, ms, es, file_name):
     openscad_executable = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
 

@@ -135,7 +135,7 @@ class main_window(wx.Frame):
         self.BrailleGen_statusbar.SetStatusText(BrailleGen_statusbar_fields[0], 0)
 
         # Call the generate function from gen.py to create Braille tiles
-        generate(translation, int(cpl_input), float(bh_input), float(ph_input), float(ms_input), float(es_input), file_name)
+        generate_with_template(translation, file_name)
 
         BrailleGen_statusbar_fields = ['Files saved to output files folder as "' + file_name + '"']
         self.BrailleGen_statusbar.SetStatusText(BrailleGen_statusbar_fields[0], 0)
