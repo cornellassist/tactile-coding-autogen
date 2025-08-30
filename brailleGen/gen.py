@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import xml.etree.ElementTree as ET
+import json
 
 #############
 # Magic sauce
@@ -57,34 +58,36 @@ def wrap_text(text, chars_per_line):
 
 def generate_with_template(text, file_name):
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(base_dir, "templates", "action_block.scad")
-    scad_folder = os.path.join(base_dir, "scad files")
-    output_folder = os.path.join(base_dir, "output files")
-    os.makedirs(scad_folder, exist_ok=True)
-    os.makedirs(output_folder, exist_ok=True)
 
-    # Read template
+    # point to your template/action_block.scad
+    template_path = os.path.join(base_dir, "template", "action_block.scad")
+
+    # single folder for both .scad and .stl
+    scad_folder = os.path.join(base_dir, "scad_files")
+    os.makedirs(scad_folder, exist_ok=True)
+
+    # read template
     with open(template_path, "r", encoding="utf-8") as f:
         scad_code = f.read()
 
-    injected = f'text_input = ["{text}"];'
-    scad_code = scad_code.replace("action", injected)
+    # Escape text safely as a SCAD string
+    safe_text = json.dumps(text)  # e.g. "This is my braille"
+    scad_code = scad_code.replace('"// %%TEXT_PLACEHOLDER%%"', safe_text)
 
-    # Save to new SCAD file
+    # save SCAD file
     scad_script_path = os.path.join(scad_folder, file_name + ".scad")
     with open(scad_script_path, "w", encoding="utf-8") as f:
         f.write(scad_code)
 
-    # Run OpenSCAD to export STL
-    openscad_executable = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"  # adjust per OS
+    # run OpenSCAD → STL in the same folder
+    openscad_executable = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
     subprocess.run([
         openscad_executable,
-        "-o", os.path.join(output_folder, file_name + ".stl"),
+        "-o", os.path.join(scad_folder, file_name + ".stl"),
         scad_script_path
     ], check=True)
 
-    add_block_to_palette(file_name)
-
+    print(f"Generated {file_name}.scad and {file_name}.stl in {scad_folder}")
 
 def generate(translation, cpl, bh, ph, ms, es, file_name):
     openscad_executable = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
@@ -175,8 +178,8 @@ def generate(translation, cpl, bh, ph, ms, es, file_name):
         the_matrix.append(current_line)
 
     # Create folders for SCAD and STL files
-    scad_folder = os.path.join(base_dir, 'scad files')
-    output_folder = os.path.join(base_dir, 'output files')
+    scad_folder = os.path.join(base_dir, 'scad_files')
+    output_folder = os.path.join(base_dir, 'output_files')
     os.makedirs(scad_folder, exist_ok=True)
     os.makedirs(output_folder, exist_ok=True)
 
@@ -254,3 +257,13 @@ def generate(translation, cpl, bh, ph, ms, es, file_name):
 ], check=True)
     add_block_to_palette(file_name)
 
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate SCAD + STL from template with input text")
+    parser.add_argument("text", help="Input text to embed in the template")
+    parser.add_argument("file_name", help="Base name for the output files (without extension)")
+
+    args = parser.parse_args()
+
+    generate_with_template(args.text, args.file_name)

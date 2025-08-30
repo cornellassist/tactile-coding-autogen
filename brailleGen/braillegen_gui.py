@@ -8,7 +8,7 @@ from threading import Thread
 # Import the translate and generate logic
 from translate import louis_translate
 from translate import quorum_to_blocks
-from gen import generate
+from gen import generate_with_template
 import iv  # Import the validation function from iv.py
 
 # Flask app setup
@@ -41,6 +41,43 @@ def translate():
             return jsonify({"error": "Missing required parameters"}), 400
         translation = louis_translate(code, params['table'], params['file_name'])
         return jsonify({"blocks": translation})
+    
+# --- Translate + Generate endpoint
+@app.route('/translate_and_generate', methods=['POST', 'OPTIONS'])
+def translate_and_generate():
+    if request.method == "OPTIONS":
+        return '', 200  # CORS preflight
+
+    if not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
+
+    data = request.get_json()
+    code = data.get("code", "")
+    params = data.get("params", {})
+    language = data.get("language", "quorum")
+    file_name = params.get("file_name")
+
+    if not file_name:
+        return jsonify({"error": "Missing file_name"}), 400
+
+    # First do translation
+    if language == "quorum":
+        translation = quorum_to_blocks(code)
+    else:
+        if "table" not in params:
+            return jsonify({"error": "Missing table parameter"}), 400
+        translation = louis_translate(code, params["table"], file_name)
+
+    # Then generate SCAD + STL
+    try:
+        generate_with_template(code, file_name)
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate files: {str(e)}"}), 500
+
+    return jsonify({
+        "blocks": translation,
+        "message": f"Generated {file_name}.scad and {file_name}.stl in scad files folder"
+    })
 
 # --- Run endpoint
 @app.route('/run', methods=['POST', 'OPTIONS'])
@@ -135,7 +172,7 @@ class main_window(wx.Frame):
         self.BrailleGen_statusbar.SetStatusText(BrailleGen_statusbar_fields[0], 0)
 
         # Call the generate function from gen.py to create Braille tiles
-        generate_with_template(translation, file_name)
+        generate_with_template(text_input, file_name)
 
         BrailleGen_statusbar_fields = ['Files saved to output files folder as "' + file_name + '"']
         self.BrailleGen_statusbar.SetStatusText(BrailleGen_statusbar_fields[0], 0)
