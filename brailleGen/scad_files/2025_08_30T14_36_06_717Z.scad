@@ -597,7 +597,7 @@ mid_block_length = leg + top_width;
 big_block_width = vert_trap_top_width +(2*leg);
 big_block_length = 76.835;
 horiz_trapezoid(depth, leg, leg, top_width, 0, 0); // Top Left Trapezoid
-text_rectangle (depth, text_block_width, text_block_length, "// %%TEXT_PLACEHOLDER%%"); // Block with Text
+text_rectangle (depth, text_block_width, text_block_length, "output \"hi\"\n"); // Block with Text
 horiz_trapezoid (depth, leg, -leg, top_width, 0, -text_block_width); // Bottom Left Trapezoid
 block_rectangle (depth, mid_block_width, mid_block_length, text_block_length, -mid_block_width); // Mid Block 
 top_triangle (depth, leg, text_block_length + top_width, 0); // Top Triangle

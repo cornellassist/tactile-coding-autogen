@@ -201,7 +201,7 @@ function App() {
       if (cmView.current) code = cmView.current.state.doc.toString();
       const timeStamp = new Date().toISOString().replace(/[^\w\s]/gi, "_");
 
-      const response = await axios.post("http://localhost:5001/translate", {
+      const response = await axios.post("http://localhost:5001/translate_and_generate", {
         code,
         params: { table: selectedTable, file_name: timeStamp },
         language: "quorum",
@@ -209,6 +209,7 @@ function App() {
 
       let blockXml = response.data.blocks;
       console.log("Injecting block XML:", blockXml);
+
 
       // Ensure namespace
       if (!blockXml.includes("xmlns")) {
@@ -237,8 +238,10 @@ function App() {
       console.log("Blockly.Blocks available:", Object.keys(Blockly.Blocks));
 
       await reloadPalette();
+      alert(response.data.message); // let the user know files were generated
     } catch (error) {
-      console.error("Error generating translation:", error);
+      console.error("Error generating translation + files:", error);
+      alert("Failed to generate SCAD/STL files");
     }
   };
 
