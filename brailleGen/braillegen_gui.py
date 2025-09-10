@@ -7,40 +7,27 @@ from threading import Thread
 
 # Import the translate and generate logic
 from translate import louis_translate
-from translate import quorum_to_blocks
+from translate import quorum_to_blocks, louis_translate
 from gen import generate_with_template
 import iv  # Import the validation function from iv.py
 
 # Flask app setup
-from flask import Flask, request, jsonify
+from flask import send_from_directory, Flask, request, jsonify
 from flask_cors import CORS
 
 # Setup Flask app to handle translation requests
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-# --- Translation endpoint
-@app.route('/translate', methods=['POST', 'OPTIONS'])
-def translate():
-    if request.method == "OPTIONS":
-        return '', 200  # CORS preflight
+base_dir = os.path.dirname(os.path.abspath(__file__))
+SCAD_FOLDER = os.path.join(base_dir, "scad_files")
 
-    if not request.is_json:
-        return jsonify({"error": "Content-Type must be application/json"}), 415
-
-    data = request.get_json()
-    code = data.get('code', "")
-    params = data.get('params', {})
-    language = data.get('language', 'quorum')
-
-    if language == "quorum":
-        translation = quorum_to_blocks(code)
-        return jsonify({"blocks": translation})
-    else:
-        if 'table' not in params or 'file_name' not in params:
-            return jsonify({"error": "Missing required parameters"}), 400
-        translation = louis_translate(code, params['table'], params['file_name'])
-        return jsonify({"blocks": translation})
+@app.route('/download/<path:filename>', methods=['GET'])
+def download_file(filename):
+    try:
+        return send_from_directory(SCAD_FOLDER, filename, as_attachment=True)
+    except FileNotFoundError:
+        return jsonify({"error": f"{filename} not found"}), 404
     
 # --- Translate + Generate endpoint
 @app.route('/translate_and_generate', methods=['POST', 'OPTIONS'])
@@ -60,26 +47,32 @@ def translate_and_generate():
     if not file_name:
         return jsonify({"error": "Missing file_name"}), 400
 
-    # First do translation
-    if language == "quorum":
-        translation = quorum_to_blocks(code)
-    else:
-        if "table" not in params:
-            return jsonify({"error": "Missing table parameter"}), 400
-        translation = louis_translate(code, params["table"], file_name)
+    # process each line separately
+    for i, line in enumerate(code.splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue  # skip blank lines
+
+        # first word = block type, rest = text
+        parts = line.split(maxsplit=1)
+        block_type = parts[0]
+        block_text = parts[1] if len(parts) > 1 else ""
+    try:
+        braille_translation = louis_translate(block_type, params.get("table"), file_name)
+    except Exception as e:
+        return jsonify({"error": f"Translation failed: {str(e)}"}), 500
 
     # Then generate SCAD + STL
     try:
-        block_type = "say" if "say" in code else "action"
-        generate_with_template(code, file_name, block_type=block_type)
-        generate_with_template(code, file_name)
+        generate_with_template(braille_translation, code, file_name)
     except Exception as e:
         return jsonify({"error": f"Failed to generate files: {str(e)}"}), 500
 
     return jsonify({
-        "blocks": translation,
-        "message": f"Generated {file_name}.scad and {file_name}.stl in scad files folder"
-    })
+    "message": f"Generated {file_name}.scad and {file_name}.stl",
+    "scad_file": f"{file_name}.scad",
+    "stl_file": f"{file_name}.stl"
+})
 
 # --- Run endpoint
 @app.route('/run', methods=['POST', 'OPTIONS'])

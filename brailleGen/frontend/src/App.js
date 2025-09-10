@@ -15,6 +15,8 @@ function App() {
   const [selectedTable, setSelectedTable] = useState("en-us-g2.ctb");
   const [params, setParams] = useState({ length: "", depth: "", lineSpacing: "" });
   const [slabMode, setSlabMode] = useState(false);
+  const [lastScadFile, setLastScadFile] = useState(null);
+  const [lastStlFile, setLastStlFile] = useState(null);
 
   const defineBlocks = () => {
     if (Blockly.Blocks['quorum_statement'] || Blockly.Blocks['output']) {
@@ -207,41 +209,11 @@ function App() {
         language: "quorum",
       });
 
-      let blockXml = response.data.blocks;
-      console.log("Injecting block XML:", blockXml);
-
-
-      // Ensure namespace
-      if (!blockXml.includes("xmlns")) {
-        blockXml = blockXml.replace(
-          "<xml>",
-          '<xml xmlns="https://developers.google.com/blockly/xml">'
-        );
-      }
-
-      // Add coords
-      let offset = 0;
-      blockXml = blockXml.replace(
-        /<block type="([^"]+)">/g,
-        (match, type) => {
-          offset += 120;
-          return `<block type="${type}" x="50" y="${offset}">`;
-        }
-      );
-
-      // Inject into Blockly
-      const xmlDom = Blockly.utils.xml.textToDom(blockXml);
-      workspaceRef.current.clear();
-      Blockly.Xml.domToWorkspace(xmlDom, workspaceRef.current);
-      workspaceRef.current.scrollCenter();
-
-      console.log("Blockly.Blocks available:", Object.keys(Blockly.Blocks));
-
-      await reloadPalette();
+      setLastScadFile(response.data.scad_file);
+      setLastStlFile(response.data.stl_file);
       alert(response.data.message); // let the user know files were generated
     } catch (error) {
-      console.error("Error generating translation + files:", error);
-      alert("Failed to generate SCAD/STL files");
+      console.error("Failed to generate files:", error);
     }
   };
 
@@ -305,6 +277,30 @@ function App() {
           <button onClick={handleTranslate} style={{ padding: "8px 12px", fontWeight: 600 }}>
             Generate
           </button>
+          <button
+            onClick={() => {
+              const link = document.createElement("a");
+              link.href = `http://localhost:5001/download/${lastScadFile}`;
+              link.click();
+            }}
+            disabled={!lastScadFile}
+            style={{ padding: "8px 12px", fontWeight: 600 }}
+          >
+            Download SCAD
+          </button>
+
+          <button
+            onClick={() => {
+              const link = document.createElement("a");
+              link.href = `http://localhost:5001/download/${lastStlFile}`;
+              link.click();
+            }}
+            disabled={!lastStlFile}
+            style={{ padding: "8px 12px", fontWeight: 600 }}
+          >
+            Download STL
+          </button>
+
           <button
             onClick={() => {
               if (window.QUORUM_EDITOR) {

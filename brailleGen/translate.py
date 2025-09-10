@@ -1,6 +1,7 @@
 import os
 import sys
 import louis
+
 # translate.py
 from xml.etree.ElementTree import Element, SubElement, tostring
 
@@ -258,48 +259,30 @@ def quorum_to_blocks(code_input: str) -> str:
         root.append(head)
     return tostring(root, encoding="unicode")
 
-
 def louis_translate(text_input, table, file_name):
-    # Check if running as a script or as a frozen executable
     if getattr(sys, 'frozen', False):  # Running as an executable
         base_dir = os.path.dirname(sys.executable)
         table_folder = os.path.join(base_dir, '_internal', 'tables')
     else:  # Running as a script
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        table_folder = os.path.join(base_dir, 'liblouis', 'tables')  # Adjust path as per your project structure
+        table_folder = os.path.join(base_dir, "liblouis/tables")
 
     dots_path = os.path.join(table_folder, "braille-patterns.cti")
+    #nemeth_path = os.path.join(table_folder, "nemethdefs.cti")
     table_path = os.path.join(table_folder, table)
     
-    # Ensure the paths exist before attempting to use them
-    if not os.path.exists(dots_path):
-        raise RuntimeError(f"Cannot resolve dots file at {dots_path}")
-    
-    if not os.path.exists(table_path):
-        raise RuntimeError(f"Cannot resolve table file at {table_path}")
+    translation = louis.translateString([dots_path, table_path], text_input)
+    # translation = louis.translateString([nemeth_path, table_path], text_input)
 
-    # Translate the input text using Louis
-    try:
-        translation = louis.translateString([dots_path, table_path], text_input)
-    except RuntimeError as e:
-        raise RuntimeError(f"Error during translation: {str(e)}")
-
-    output_folder = os.path.join(base_dir, 'output files')
+    output_folder = os.path.join(base_dir, 'output_files')
 
     # Create the folder if it doesn't exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Save the translation to a file
-    output_file = os.path.join(output_folder, file_name + ".txt")
+    # translation output
+    output_file = os.path.join(output_folder, file_name+".txt")
     with open(output_file, "w", encoding="utf-8") as file:
-        file.write(table + "\n" + text_input + "\n" + translation)
+        file.write(table + "\n" + "say" + "\n" + translation)
     
-    # Convert translation into XML format for Blockly
-    root = Element('xml')
-    block = SubElement(root, 'block', type="brailleTile")
-    field = SubElement(block, 'field', name="TEXT")
-    field.text = translation
-    
-    # Return XML string
-    return tostring(root, encoding="unicode")
+    return translation
