@@ -273,16 +273,5 @@ def louis_translate(text_input, table, file_name):
     
     translation = louis.translateString([dots_path, table_path], text_input)
     # translation = louis.translateString([nemeth_path, table_path], text_input)
-
-    output_folder = os.path.join(base_dir, 'output_files')
-
-    # Create the folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    # translation output
-    output_file = os.path.join(output_folder, file_name+".txt")
-    with open(output_file, "w", encoding="utf-8") as file:
-        file.write(table + "\n" + "say" + "\n" + translation)
     
     return translation
