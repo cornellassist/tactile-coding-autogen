@@ -628,12 +628,12 @@ connector_trapezoid_width = 22.039;
 
 block_trapezoid(depth, leg, leg, top_width, 0, 0); // Top Left Trapezoid
 block_trapezoid(depth, leg, leg, top_width, 2*(top_width) + 2*(leg), 0); // Top Right Trapezoid
-block_rectangle(depth, leg, top_width, block_width, "// %%TEXT_PLACEHOLDER%%"); // Rectangle Block
+block_rectangle(depth, leg, top_width, block_width, "// %%TEXT_PLACEHOLDER1%%"); // Rectangle Block
 block_trapezoid(depth, leg, -leg, top_width, 0, -block_width); // Bottom Left Trapezoid
 block_trapezoid(depth, leg, -leg, top_width, 2*(top_width)+ 2*(leg), -block_width); // Bottom Right Trapezoid
 block_trapezoid(depth, leg, leg, top_width, top_width + leg, -block_width-leg); // Top Half Hexagon
 block_trapezoid(depth, leg, -leg, top_width, top_width + leg, -block_width-leg); // Bottom Half Hexagon
 connector_trapezoid(depth / 2, leg, top_width, block_width); // Connector Trapezoid
 block_connector(depth, leg, top_width, connector_side_length, connector_trapezoid_width, connector_start_x);
-braille_str("say", 0, depth, leg, top_width, block_width);
+braille_str("// %%TEXT_PLACEHOLDER%%", 0, depth, leg, top_width, block_width);
 

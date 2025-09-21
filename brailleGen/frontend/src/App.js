@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import * as Blockly from "blockly";
-import { javascriptGenerator } from "blockly/javascript";
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
@@ -15,13 +14,13 @@ function App() {
   const [selectedTable, setSelectedTable] = useState("en-us-g2.ctb");
   const [params, setParams] = useState({ length: "", depth: "", lineSpacing: "" });
   const [slabMode, setSlabMode] = useState(false);
+  const [lastScadFile, setLastScadFile] = useState(null);
+  const [lastStlFile, setLastStlFile] = useState(null);
 
+  // Define all custom blocks at the very top, synchronously
   const defineBlocks = () => {
-    if (Blockly.Blocks['quorum_statement'] || Blockly.Blocks['output']) {
-      console.log("Blocks are already defined.");
-      return;
-    }
-    console.log("Defining blocks...");
+    if (Blockly.Blocks['quorum_statement']) return; // already defined
+
     Blockly.defineBlocksWithJsonArray([
       {
         type: "output",
@@ -40,89 +39,17 @@ function App() {
         nextStatement: null,
         colour: 120,
         tooltip: "Generic Quorum statement"
-      },
-      {
-        type: "comment",
-        message0: "// %1",
-        args0: [{ type: "field_input", name: "TEXT", text: "" }],
-        previousStatement: null,
-        nextStatement: null,
-        colour: 60,
-        tooltip: "Comment"
       }
-      // For variables, math, loops, if → Blockly already has built-in blocks
     ]);
   };
 
   // --- Initialize Blockly workspace
   useEffect(() => {
-    // Define blocks before initializing Blockly
-    defineBlocks();
+    defineBlocks(); // blocks must exist
 
-    if (!workspaceRef.current) {
-      let toolboxXml = document.getElementById("toolbox");
-
-      // If toolbox is not available, create a default toolbox XML
-      if (!toolboxXml) {
-        const defaultToolboxXml = `
-        <xml xmlns="https://developers.google.com/blockly/xml">
-  <block type="controls_if">
-    <value name="IF0">
-      <block type="logic_boolean">
-        <field name="BOOL">TRUE</field>
-      </block>
-    </value>
-    <statement name="DO0">
-      <block type="output">
-        <field name="TEXT">hi</field>
-        <next>
-          <block type="output">
-            <field name="TEXT">world</field>
-          </block>
-        </next>
-      </block>
-    </statement>
-    <next>
-      <block type="output">
-        <field name="TEXT">done</field>
-      </block>
-    </next>
-  </block>
-</xml>
-
-
-      `;
-        // Create a new DOM element to inject the default toolbox
-        const toolboxDom = Blockly.utils.xml.textToDom(defaultToolboxXml);
-        toolboxXml = toolboxDom;
-      }
-
-      // Now inject Blockly workspace
-      workspaceRef.current = Blockly.inject("blocklyDiv", {
-        toolbox: toolboxXml,
-        trashcan: true,
-        scrollbars: true,
-        renderer: "thrasos",
-      });
-
-      reloadPalette()
-    }
-
-    // Handle window resize to resize Blockly workspace
-    const onResize = () => {
-      if (workspaceRef.current) {
-        Blockly.svgResize(workspaceRef.current);
-      }
-    };
-
-    window.addEventListener("resize", onResize);
-
-    // Cleanup resize listener on component unmount
-    return () => {
-      window.removeEventListener("resize", onResize);
-    };
+    // Now you can safely update the toolbox
+    reloadPalette();
   }, []);
-
 
   // --- Initialize Quorum editor (blockEditor.js) + CodeMirror
   useEffect(() => {
@@ -158,41 +85,51 @@ function App() {
   // --- Reload toolbox from palette.xml
   const reloadPalette = async () => {
     try {
-      const res = await fetch(`/WebBlockEditor/palette.xml?ts=${Date.now()}`);
+      // Fetch palette.xml
+      const res = await fetch(`/quorum-website/WebBlockEditor/palette.xml?ts=${Date.now()}`);
       if (!res.ok) throw new Error("palette.xml not found");
 
       const xmlText = await res.text();
-      const xmlDom = Blockly.utils.xml.textToDom(xmlText);
+      const parser = new DOMParser();
+      const paletteDom = parser.parseFromString(xmlText, "text/xml");
 
-      // Ensure the toolbox structure has categories
-      if (!xmlDom.querySelector("category")) {
-        console.warn("Toolbox XML does not contain categories. Adding default category.");
+      // Find the "HoC" page
+      const pages = Array.from(paletteDom.getElementsByTagName("page"));
+      const hocPage = pages.find(p => p.getAttribute("name")?.trim() === "HoC");
+      if (!hocPage) throw new Error("No HoC page found in palette.xml");
 
-        const defaultCategoryXml = `
-        <category name="Quorum Blocks" colour="#5C81A6">
-          <block type="quorum_statement">
-            <field name="CODE">// Write your Quorum code here</field>
-          </block>
-          <block type="output">
-            <field name="TEXT">hi</field>
-          </block>
+      // Build blocks XML
+      let blocksXml = "";
+      hocPage.querySelectorAll("block").forEach(b => {
+        const codeSnippet = b.textContent.trim();
+        let blockType = codeSnippet.startsWith("output") ? "output" : "quorum_statement";
+
+        // Determine correct field name
+        const fieldName = blockType === "output" ? "TEXT" : "CODE";
+
+        // Insert block into toolbox
+        blocksXml += `<block type="${blockType}"><field name="${fieldName}">${codeSnippet}</field></block>`;
+      });
+
+      // Build toolbox XML
+      const toolboxXml = `
+      <xml xmlns="https://developers.google.com/blockly/xml">
+        <category name="Hour of Code" colour="#9C27B0">
+          ${blocksXml}
         </category>
-      `;
+      </xml>
+    `;
 
-        const defaultCategoryDom = Blockly.utils.xml.textToDom(defaultCategoryXml);
-        xmlDom.appendChild(defaultCategoryDom);
-      }
-
-      // Update the toolbox with the new XML structure
+      // Parse and update Blockly toolbox
+      const toolboxDom = Blockly.utils.xml.textToDom(toolboxXml);
       if (workspaceRef.current) {
-        workspaceRef.current.updateToolbox(xmlDom);
+        workspaceRef.current.updateToolbox(toolboxDom);
+        console.log("Hour of Code tray loaded with", hocPage.querySelectorAll("block").length, "blocks!");
       }
-
     } catch (err) {
-      console.warn("Failed to load palette.xml, toolbox unchanged", err);
+      console.error("Failed to load Hour of Code palette:", err);
     }
   };
-
 
   // --- Handle translation
   const handleTranslate = async () => {
@@ -207,41 +144,11 @@ function App() {
         language: "quorum",
       });
 
-      let blockXml = response.data.blocks;
-      console.log("Injecting block XML:", blockXml);
-
-
-      // Ensure namespace
-      if (!blockXml.includes("xmlns")) {
-        blockXml = blockXml.replace(
-          "<xml>",
-          '<xml xmlns="https://developers.google.com/blockly/xml">'
-        );
-      }
-
-      // Add coords
-      let offset = 0;
-      blockXml = blockXml.replace(
-        /<block type="([^"]+)">/g,
-        (match, type) => {
-          offset += 120;
-          return `<block type="${type}" x="50" y="${offset}">`;
-        }
-      );
-
-      // Inject into Blockly
-      const xmlDom = Blockly.utils.xml.textToDom(blockXml);
-      workspaceRef.current.clear();
-      Blockly.Xml.domToWorkspace(xmlDom, workspaceRef.current);
-      workspaceRef.current.scrollCenter();
-
-      console.log("Blockly.Blocks available:", Object.keys(Blockly.Blocks));
-
-      await reloadPalette();
+      setLastScadFile(response.data.scad_file);
+      setLastStlFile(response.data.stl_file);
       alert(response.data.message); // let the user know files were generated
     } catch (error) {
-      console.error("Error generating translation + files:", error);
-      alert("Failed to generate SCAD/STL files");
+      console.error("Failed to generate files:", error);
     }
   };
 
@@ -255,39 +162,23 @@ function App() {
 
   return (
     <>
-      <div
-        id="toolbox"
-        style={{ display: "none" }}
-        dangerouslySetInnerHTML={{
-          __html: `<xml xmlns="https://developers.google.com/blockly/xml">
-      <category name="Logic" categorystyle="logic_category"></category>
-      <category name="Loops" categorystyle="loop_category"></category>
-      <category name="Math" categorystyle="math_category"></category>
-      <category name="Text" categorystyle="text_category"></category>
-      <category name="Lists" categorystyle="list_category"></category>
-      <category name="Variables" categorystyle="variable_category"></category>
-      <category name="Functions" categorystyle="procedure_category"></category>
-      <sep></sep>
-      <category name="Quorum Custom" colour="#5C81A6">
-        <block type="output"></block>
-        <block type="quorum_statement"></block>
-        <block type="comment"></block>
-      </category>
-    </xml>` }}
-      />
       <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
         {/* Header */}
         <div
           style={{
-            backgroundColor: "#FFE4C9",
-            color: "#111",
+            backgroundColor: "#8D2018",
+            color: "#DEBEBC",
             padding: "12px 16px",
-            fontSize: 20,
+            fontSize: 40,
             fontWeight: "bold",
             borderBottom: "1px solid #ddd",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
           }}
         >
-          Braille Tile Generator
+          <span>Tactile Coding Blocks Generator</span>
+          <img src="/cat_logo2.png" alt="Logo" style={{ height: "150px" }} />
         </div>
 
         {/* Controls */}
@@ -296,7 +187,7 @@ function App() {
             display: "flex",
             alignItems: "center",
             gap: 12,
-            backgroundColor: "#E78895",
+            backgroundColor: "#DEBEBC",
             padding: "10px 16px",
             flexWrap: "wrap",
             borderBottom: "1px solid #c7717e",
@@ -305,6 +196,30 @@ function App() {
           <button onClick={handleTranslate} style={{ padding: "8px 12px", fontWeight: 600 }}>
             Generate
           </button>
+          <button
+            onClick={() => {
+              const link = document.createElement("a");
+              link.href = `http://localhost:5001/download/${lastScadFile}`;
+              link.click();
+            }}
+            disabled={!lastScadFile}
+            style={{ padding: "8px 12px", fontWeight: 600 }}
+          >
+            Download SCAD
+          </button>
+
+          <button
+            onClick={() => {
+              const link = document.createElement("a");
+              link.href = `http://localhost:5001/download/${lastStlFile}`;
+              link.click();
+            }}
+            disabled={!lastStlFile}
+            style={{ padding: "8px 12px", fontWeight: 600 }}
+          >
+            Download STL
+          </button>
+
           <button
             onClick={() => {
               if (window.QUORUM_EDITOR) {
@@ -325,24 +240,6 @@ function App() {
             style={{ padding: "8px 12px" }}
           >
             Clear Blocks
-          </button>
-          <button
-            onClick={async () => {
-              try {
-                const code = cmView.current
-                  ? cmView.current.state.doc.toString()
-                  : "";
-                const response = await axios.post("http://localhost:5001/run", { code });
-                console.log("Run output:", response.data);
-                alert("Program output:\n" + response.data.output);
-              } catch (err) {
-                console.error("Run error:", err);
-                alert("Failed to run program");
-              }
-            }}
-            style={{ padding: "8px 12px", fontWeight: 600 }}
-          >
-            Run
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <label>Braille Table:</label>
@@ -411,32 +308,6 @@ function App() {
                 lineHeight: "1.4",
                 overflow: "auto",
                 background: "#fafafa",
-              }}
-            />
-          </div>
-
-          {/* Right: Blockly workspace */}
-          <div
-            style={{
-              flex: 1,
-              padding: 20,
-              display: "flex",
-              flexDirection: "column",
-              minHeight: 0,
-            }}
-          >
-            <label>
-              <strong>Workspace</strong>
-            </label>
-            <div
-              id="blocklyDiv"
-              style={{
-                flex: 1,
-                minHeight: 240,
-                border: "1px solid #ddd",
-                borderRadius: 8,
-                marginTop: 8,
-                boxSizing: "border-box",
               }}
             />
           </div>
