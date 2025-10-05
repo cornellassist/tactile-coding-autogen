@@ -47,9 +47,20 @@ function App() {
   useEffect(() => {
     defineBlocks(); // blocks must exist
 
+
+    if (!workspaceRef.current) {
+      workspaceRef.current = Blockly.inject("blocklyDiv", {
+        toolbox: `<xml></xml>`, // empty toolbox initially
+        trashcan: true,
+        scrollbars: true,
+        renderer: "thrasos",
+      });
+    }
+
     // Now you can safely update the toolbox
     reloadPalette();
   }, []);
+
 
   // --- Initialize Quorum editor (blockEditor.js) + CodeMirror
   useEffect(() => {
@@ -308,6 +319,31 @@ function App() {
                 lineHeight: "1.4",
                 overflow: "auto",
                 background: "#fafafa",
+              }}
+            />
+          </div>
+          {/* Right: Blockly workspace */}
+          <div
+            style={{
+              flex: 1,
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            }}
+          >
+            <label>
+              <strong>Workspace</strong>
+            </label>
+            <div
+              id="blocklyDiv"
+              style={{
+                flex: 1,
+                minHeight: 240,
+                border: "1px solid #ddd",
+                borderRadius: 8,
+                marginTop: 8,
+                boxSizing: "border-box",
               }}
             />
           </div>
