@@ -1,6 +1,6 @@
 
-    the_matrix = [[[[0, 1, 0], [0, 0, 1]], [[1, 0, 0], [1, 1, 0]]]];
-    export_scale = 1; //USER INPUT
+the_matrix = [[[[1, 0, 0], [0, 0, 0]], [[1, 0, 0], [1, 0, 0]], [[0, 0, 0], [0, 1, 1]], [[1, 0, 1], [1, 1, 0]]]];
+export_scale = 1; //USER INPUT
 
     diameter = 1.6;
     radius = diameter / 2;
@@ -41,7 +41,7 @@
                 cube([plate_depth * (line+1), plate_length, plate_height]); //rectangular prism backing the braille
             }
             color("white")
-            translate([(leg+top_width)/2, distance * index + leg + 6*top_width/7, depth]) {
+            translate([(leg+top_width)/2, distance * index + leg/2, depth]) {
                 for (col = [0:1]) {
                     for (row = [0:2]) {
                         if (bitmap[col][row] == 1) {
@@ -56,18 +56,17 @@
         }
     }
 module horiz_trapezoid (depth, leg_x, leg_y, top_width, left_bottom_x, left_bottom_y) {
-    color("black")
-    linear_extrude(depth)
-    polygon(
-        points=[
-            [left_bottom_x, left_bottom_y],  // Bottom left corner
-            [left_bottom_x + leg_x, left_bottom_y + leg_y], // Top left corner
-            [left_bottom_x + leg_x + top_width, left_bottom_y + leg_y], // Top right corner
-            [left_bottom_x + top_width + 2*(leg_x), left_bottom_y]   // Bottom right corner
-        ]
-    );
+color("black")
+linear_extrude(depth)
+polygon(
+    points=[
+        [left_bottom_x, left_bottom_y],  // Bottom left corner
+        [left_bottom_x + leg_x, left_bottom_y + leg_y], // Top left corner
+        [left_bottom_x + leg_x + top_width, left_bottom_y + leg_y], // Top right corner
+        [left_bottom_x + top_width + 2*(leg_x), left_bottom_y]   // Bottom right corner
+    ]
+);
 }
-
 module vert_trapezoid (depth, leg_x, leg_y, top_width, left_bottom_x, left_bottom_y) {
     color("black")
     linear_extrude(depth)
@@ -80,44 +79,39 @@ module vert_trapezoid (depth, leg_x, leg_y, top_width, left_bottom_x, left_botto
         ]
     );
 }
-
 module text_rectangle (depth, block_width, block_length, text) {
-    start_x = 3*(leg)+2*(top_width);
-    difference() {
-        plate = [block_length, block_width, depth]; // Block
-        translate([0, -block_width, 0])
-        color("black")
-        cube(plate);
-    
-        translate([0.02, 0.02, -0.2])
-        color("black")
-        horiz_trapezoid (depth*2, leg, -leg, top_width, start_x, 0);
-        
-        translate([-0.02, -0.02, -0.2])
-        color("black")
-        top_triangle (depth*2, leg, 0, -text_block_width);
-    }
-    
+    plate = [block_length, block_width, depth]; // Block
+    translate([0, -block_width, 0])
+    color("black")
+    cube(plate);
     color("white")
     linear_extrude(3*depth/2)
-    translate([leg+top_width+leg/3, -leg, 0])
+    translate([leg+(top_width/2),-1*leg,0])
     text( text, size = 6, halign = "center");
+    
 }
-
 module block_rectangle (depth, block_width, block_length, start_x, start_y) {
-
+    plate = [block_length, block_width, depth]; // Block
+    translate([start_x, start_y, 0])
+    color("black")
+    cube(plate);
+}
+module indent_rectangle (depth, leg, width_down, block_width, block_length, start_x, start_y) {
+    plate1 = [block_length, block_width, depth]; // Block
+    plate2 = [69, 22, depth / 2];
+    
     difference() {
-        plate = [block_length, block_width, depth]; // Block
         translate([start_x, start_y, 0])
         color("black")
-        cube(plate);
+        cube(plate1);
+        
+        translate([0.2, 0.2, 0.2])
+        translate([start_x+leg/2, -width_down-leg/4, depth/2])
+        color("white")
+        cube(plate2);  
+     }
     
-        translate([0.02, 0.02, -0.2])
-        color("black")
-        horiz_trapezoid (depth*2, leg, -leg, top_width, 0,  top_block_width);
-    }
 }
-
 module bot_triangle (depth, leg, start_x, start_y)
     color("black")
     linear_extrude(depth)
@@ -128,32 +122,33 @@ module bot_triangle (depth, leg, start_x, start_y)
             [start_x + leg, start_y], 
         ]
     );
-
 module top_triangle (depth, leg, start_x, start_y)
     color("black")
     linear_extrude(depth)
     polygon(
         points=[
             [start_x, start_y],
-            [start_x, start_y + leg], 
             [start_x + leg, start_y],
-        ]
-        
-    );
-
+            [start_x + leg, start_y + leg], 
+        ]      
+ );
 depth = 3.6;
 leg = 9.19;
 top_width = 14;
-vert_trap_width = 16.686;
-text_block_width = 2*(leg)+vert_trap_width;
-text_block_length = 6*(leg)+3*(top_width)+20.098;
-bot_trap_x = leg+top_width;
-top_block_width = 12+leg;
-top_block_length = 2*(leg)+top_width;
-
-text_rectangle (depth, text_block_width, text_block_length, "end"); // Main block with text
-vert_trapezoid (depth, leg, leg, vert_trap_width, text_block_length, 0); // Right end trapezoid
-horiz_trapezoid (depth, leg, -leg, top_width, bot_trap_x, -text_block_width); // Bottom trapezoid
-block_rectangle (depth, top_block_width, top_block_length, 0, 0); // Added top block to left
-top_triangle (depth, leg, top_block_length, 0);
+vert_trap_top_width = 17.939;
+text_block_width = 46.319;
+text_block_length = leg + top_width + leg;
+mid_block_width = vert_trap_top_width + leg;
+mid_block_length = leg + top_width;
+big_block_width = vert_trap_top_width +(2*leg);
+big_block_length = 76.835;
+horiz_trapezoid(depth, leg, leg, top_width, 0, 0); // Top Left Trapezoid
+text_rectangle (depth, text_block_width, text_block_length, "action"); // Block with Text
+horiz_trapezoid (depth, leg, -leg, top_width, 0, -text_block_width); // Bottom Left Trapezoid
+block_rectangle (depth, mid_block_width, mid_block_length, text_block_length, -mid_block_width); // Mid Block 
+top_triangle (depth, leg, text_block_length + top_width, 0); // Top Triangle
+bot_triangle (depth, leg, text_block_length, -mid_block_width); // Bot Triangle
+indent_rectangle (depth, leg, vert_trap_top_width, big_block_width, big_block_length, text_block_length + top_width + leg,-big_block_width+leg); // Big Block
+vert_trapezoid (depth, leg, leg, vert_trap_top_width, text_block_length + top_width + leg + big_block_length, leg); 
+horiz_trapezoid (depth, leg, -leg, top_width, 3*(leg) + 2*(top_width), -vert_trap_top_width-leg); // Bottom Right Trapezoid
     
