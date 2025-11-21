@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import * as Blockly from "blockly";
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
@@ -8,69 +7,37 @@ import { indentWithTab } from "@codemirror/commands";
 import { keymap } from "@codemirror/view";
 
 function App() {
-  const workspaceRef = useRef(null);
   const cmView = useRef(null);
-
+  const iframeRef = useRef(null);
   const [selectedTable, setSelectedTable] = useState("en-us-g2.ctb");
   const [params, setParams] = useState({ length: "", depth: "", lineSpacing: "" });
   const [slabMode, setSlabMode] = useState(false);
   const [lastScadFile, setLastScadFile] = useState(null);
   const [lastStlFile, setLastStlFile] = useState(null);
 
-  // Define all custom blocks at the very top, synchronously
-  const defineBlocks = () => {
-    if (Blockly.Blocks['quorum_statement']) return; // already defined
-
-    Blockly.defineBlocksWithJsonArray([
-      {
-        type: "output",
-        message0: "output %1",
-        args0: [{ type: "field_input", name: "TEXT", text: "" }],
-        previousStatement: null,
-        nextStatement: null,
-        colour: 160,
-        tooltip: "Quorum output"
-      },
-      {
-        type: "quorum_statement",
-        message0: "statement %1",
-        args0: [{ type: "field_input", name: "CODE", text: "" }],
-        previousStatement: null,
-        nextStatement: null,
-        colour: 120,
-        tooltip: "Generic Quorum statement"
-      }
-    ]);
-  };
-
-  // --- Initialize Blockly workspace
   useEffect(() => {
-    defineBlocks(); // blocks must exist
+    function handleMessage(event) {
+      const { type, code } = event.data;
 
+      if (type === "BLOCK_EDITOR_READY") {
+        console.log("Quorum iframe is ready.");
+      }
 
-    if (!workspaceRef.current) {
-      workspaceRef.current = Blockly.inject("blocklyDiv", {
-        toolbox: `<xml></xml>`, // empty toolbox initially
-        trashcan: true,
-        scrollbars: true,
-        renderer: "thrasos",
-      });
+      if (type === "BLOCK_CODE_CHANGED" && cmView.current) {
+        const current = cmView.current.state.doc.toString();
+        if (current !== code) {
+          cmView.current.dispatch({
+            changes: { from: 0, to: current.length, insert: code }
+          });
+        }
+      }
     }
 
-    // Now you can safely update the toolbox
-    reloadPalette();
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
-
-  // --- Initialize Quorum editor (blockEditor.js) + CodeMirror
   useEffect(() => {
-    if (window.plugins_quorum_WebEditor_BlockEditor_) {
-      window.QUORUM_EDITOR = new window.plugins_quorum_WebEditor_BlockEditor_();
-      console.log("QUORUM_EDITOR initialized");
-
-      defineBlocks(); // <- Re-define custom blocks AFTER blockEditor.js initializes
-    }
-    console.log("Blockly.Blocks available:", Object.keys(Blockly.Blocks));
     if (!cmView.current) {
       const parent = document.getElementById("QuorumEditor");
       if (parent) {
@@ -85,62 +52,15 @@ function App() {
                 const code = update.state.doc.toString();
                 window.QUORUM_EDITOR.SetCode$quorum_text(code);
               }
-            }),
-          ],
+            })
+          ]
         });
         cmView.current = new EditorView({ state, parent });
       }
     }
-  }, []);
+  }, []); // --- Initialize Quorum editor (blockEditor.js) + CodeMirror
 
-  // --- Reload toolbox from palette.xml
-  const reloadPalette = async () => {
-    try {
-      // Fetch palette.xml
-      const res = await fetch(`/quorum-website/WebBlockEditor/palette.xml?ts=${Date.now()}`);
-      if (!res.ok) throw new Error("palette.xml not found");
-
-      const xmlText = await res.text();
-      const parser = new DOMParser();
-      const paletteDom = parser.parseFromString(xmlText, "text/xml");
-
-      // Find the "HoC" page
-      const pages = Array.from(paletteDom.getElementsByTagName("page"));
-      const hocPage = pages.find(p => p.getAttribute("name")?.trim() === "HoC");
-      if (!hocPage) throw new Error("No HoC page found in palette.xml");
-
-      // Build blocks XML
-      let blocksXml = "";
-      hocPage.querySelectorAll("block").forEach(b => {
-        const codeSnippet = b.textContent.trim();
-        let blockType = codeSnippet.startsWith("output") ? "output" : "quorum_statement";
-
-        // Determine correct field name
-        const fieldName = blockType === "output" ? "TEXT" : "CODE";
-
-        // Insert block into toolbox
-        blocksXml += `<block type="${blockType}"><field name="${fieldName}">${codeSnippet}</field></block>`;
-      });
-
-      // Build toolbox XML
-      const toolboxXml = `
-      <xml xmlns="https://developers.google.com/blockly/xml">
-        <category name="Hour of Code" colour="#9C27B0">
-          ${blocksXml}
-        </category>
-      </xml>
-    `;
-
-      // Parse and update Blockly toolbox
-      const toolboxDom = Blockly.utils.xml.textToDom(toolboxXml);
-      if (workspaceRef.current) {
-        workspaceRef.current.updateToolbox(toolboxDom);
-        console.log("Hour of Code tray loaded with", hocPage.querySelectorAll("block").length, "blocks!");
-      }
-    } catch (err) {
-      console.error("Failed to load Hour of Code palette:", err);
-    }
-  };
+  const workspaceRef = useRef(null);
 
   // --- Handle translation
   const handleTranslate = async () => {
@@ -162,7 +82,6 @@ function App() {
       console.error("Failed to generate files:", error);
     }
   };
-
 
   const handleParamChange = (e) => {
     const { name, value } = e.target;
@@ -247,7 +166,7 @@ function App() {
             Clear Code
           </button>
           <button
-            onClick={() => workspaceRef.current && workspaceRef.current.clear()}
+            onClick={() => window.QUORUM_EDITOR && window.QUORUM_EDITOR.Clear$()}
             style={{ padding: "8px 12px" }}
           >
             Clear Blocks
@@ -322,33 +241,12 @@ function App() {
               }}
             />
           </div>
-          {/* Right: Blockly workspace */}
-          <div
-            style={{
-              flex: 1,
-              padding: 20,
-              display: "flex",
-              flexDirection: "column",
-              minHeight: 0,
-            }}
-          >
-            <label>
-              <strong>Workspace</strong>
-            </label>
-            <div
-              id="blocklyDiv"
-              style={{
-                flex: 1,
-                minHeight: 240,
-                border: "1px solid #ddd",
-                borderRadius: 8,
-                marginTop: 8,
-                boxSizing: "border-box",
-              }}
-            />
+          {/* Right: Quorum block workspace */}
+          <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column" }}>
+            <label><strong>Workspace</strong></label>
           </div>
         </div>
-      </div>
+      </div >
     </>
   );
 }

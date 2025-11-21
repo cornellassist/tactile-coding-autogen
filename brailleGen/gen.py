@@ -180,12 +180,13 @@ scale([export_scale, export_scale, export_scale]) {{
 // braille_str transforms each braille character into its position on the plate
 module braille_points(line, index, bitmap, top_width, connector_side_length) {{
     plate_length = (distance * len(the_matrix[line])) + letfc * 2 - diameter;
+    start = ((4*leg+3*top_width) - plate_length)/2;
     union() {{
         color([19/255,56/255,190/255]) {{ //preview color, blue
             cube([plate_depth * (line+1), plate_length, plate_height]); //rectangular prism backing the braille
         }}
         color("white")
-        translate([line_margin + plate_depth * line + top_width + 2, distance * index + letfc + connector_side_length, depth]) {{
+        translate([line_margin + plate_depth * line + top_width + 2, distance * index + letfc + start, depth]) {{
             for (col = [0:1]) {{
                 for (row = [0:2]) {{
                     if (bitmap[col][row] == 1) {{
