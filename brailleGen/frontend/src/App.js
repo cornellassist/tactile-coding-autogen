@@ -8,34 +8,11 @@ import { keymap } from "@codemirror/view";
 
 function App() {
   const cmView = useRef(null);
-  const iframeRef = useRef(null);
   const [selectedTable, setSelectedTable] = useState("en-us-g2.ctb");
   const [params, setParams] = useState({ length: "", depth: "", lineSpacing: "" });
   const [slabMode, setSlabMode] = useState(false);
   const [lastScadFile, setLastScadFile] = useState(null);
   const [lastStlFile, setLastStlFile] = useState(null);
-
-  useEffect(() => {
-    function handleMessage(event) {
-      const { type, code } = event.data;
-
-      if (type === "BLOCK_EDITOR_READY") {
-        console.log("Quorum iframe is ready.");
-      }
-
-      if (type === "BLOCK_CODE_CHANGED" && cmView.current) {
-        const current = cmView.current.state.doc.toString();
-        if (current !== code) {
-          cmView.current.dispatch({
-            changes: { from: 0, to: current.length, insert: code }
-          });
-        }
-      }
-    }
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
 
   useEffect(() => {
     if (!cmView.current) {
@@ -59,8 +36,6 @@ function App() {
       }
     }
   }, []); // --- Initialize Quorum editor (blockEditor.js) + CodeMirror
-
-  const workspaceRef = useRef(null);
 
   // --- Handle translation
   const handleTranslate = async () => {
@@ -212,7 +187,7 @@ function App() {
 
         {/* Main split */}
         <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-          {/* Left: Quorum editor (CodeMirror injected + synced with blockEditor.js) */}
+          {/* Left: Quorum IDE */}
           <div
             style={{
               flex: 1,
@@ -241,10 +216,69 @@ function App() {
               }}
             />
           </div>
-          {/* Right: Quorum block workspace */}
-          <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column" }}>
-            <label><strong>Workspace</strong></label>
+
+          {/* Right: Quorum Hour of Code Tray */}
+          <div
+            style={{
+              flex: 3,
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              background: "#f9fafb",
+            }}
+          >
+            <label>
+              <strong>Quorum Hour of Code Tray</strong>
+            </label>
+
+            <div
+              id="BlockEditor"
+              style={{
+                flex: 1,
+                border: "2px solid #2563eb",
+                borderRadius: 8,
+                overflow: "hidden",
+                position: "relative",
+                background: "#ffffff",
+              }}
+            >
+              <div id="BlockUIContainer" className="grow relative" />
+              <div id="QuorumUIContainer" className="w-full relative overflow-hidden" />
+              <div
+                id="QuorumUIOutput"
+                tabIndex={0}
+                role="log"
+                style={{
+                  height: 120,
+                  overflow: "auto",
+                  fontFamily: "monospace",
+                  borderTop: "1px solid #ddd",
+                  padding: 8,
+                  background: "#f3f4f6",
+                }}
+              />
+            </div>
           </div>
+        </div>
+        <div style={{
+          padding: 20,
+          borderTop: "1px solid #ddd",
+          background: "#f9f9f9"
+        }}>
+          <h3>Quorum IDE Commands</h3>
+          <p>Type the following commands into the Quorum IDE:</p>
+          <pre style={{
+            background: "#fff",
+            padding: 10,
+            borderRadius: 4,
+            fontFamily: "monospace"
+          }}>
+            {`action Main
+say "text"
+class Main
+end`}
+          </pre>
         </div>
       </div >
     </>
