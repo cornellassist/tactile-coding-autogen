@@ -190,7 +190,7 @@ function App() {
           {/* Left: Quorum IDE */}
           <div
             style={{
-              flex: 1,
+              flex: 2,
               padding: 20,
               borderRight: "1px solid #000",
               display: "flex",
@@ -199,8 +199,28 @@ function App() {
             }}
           >
             <label>
-              <strong>Quorum IDE</strong>
+              <strong>Quorum IDE & Commands</strong>
             </label>
+
+            <div style={{
+              padding: 10,
+              borderTop: "1px solid #ddd",
+              background: "#f9f9f9"
+            }}>
+              <p>Type the one of the following commands into the Quorum IDE below:</p>
+              <pre style={{
+                background: "#fff",
+                padding: 10,
+                borderRadius: 4,
+                fontFamily: "monospace"
+              }}>
+                {`action Main
+say "text"
+class Main
+end`}
+              </pre>
+              <p>The Quorum Hour of Code Tray to the right is not fully functional.</p>
+            </div>
             <div
               id="QuorumEditor"
               style={{
@@ -260,25 +280,6 @@ function App() {
               />
             </div>
           </div>
-        </div>
-        <div style={{
-          padding: 20,
-          borderTop: "1px solid #ddd",
-          background: "#f9f9f9"
-        }}>
-          <h3>Quorum IDE Commands</h3>
-          <p>Type the following commands into the Quorum IDE:</p>
-          <pre style={{
-            background: "#fff",
-            padding: 10,
-            borderRadius: 4,
-            fontFamily: "monospace"
-          }}>
-            {`action Main
-say "text"
-class Main
-end`}
-          </pre>
         </div>
       </div >
     </>
