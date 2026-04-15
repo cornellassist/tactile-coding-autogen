@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Test Web Application</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html,
+        body,
+        #QuorumUIRoot {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+    <!--
+    <script src="QuorumStandardLibrary.js"></script>
+    <script src="Default.js"></script>
+    -->
+    <script src="/quorum-website/WebBlockEditor/plugins/WebEditor/WebEditor.js"></script>
+    <script src="/quorum-website/WebBlockEditor/Run/QuorumStandardLibrary.js"></script>
+    <script src="/quorum-website/WebBlockEditor/Run/Default.js"></script>
+
+</head>
+
+<body>
+    <div id="QuorumUIContainer"></div>
+    <script type="text/javascript">
+        var Module = {
+            onRuntimeInitialized: function () {
+                Start();
+                console.log("start()");
+            }
+        };
+    </script>
+    <script type="application/javascript" src="load.js"></script>
+</body>
+
+</html>
