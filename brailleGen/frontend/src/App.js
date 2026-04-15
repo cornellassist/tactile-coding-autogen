@@ -263,7 +263,12 @@ end`}
                 background: "#ffffff",
               }}
             >
-              <div id="BlockUIContainer" className="grow relative" />
+              <div
+                id="BlockUIContainer"
+                className="grow relative focusButton"
+                data-code-for-ide='[{"file": "Main.quorum", "data": ""}]'
+                data-palette-for-ide=""
+              />
               <div id="QuorumUIContainer" className="w-full relative overflow-hidden" />
               <div
                 id="QuorumUIOutput"

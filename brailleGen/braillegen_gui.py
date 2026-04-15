@@ -1,6 +1,15 @@
 import os
+import ctypes
 import datetime
 from threading import Thread
+
+# On macOS, liblouis.20.dylib lives in Homebrew's prefix which is not on the
+# default dlopen search path.  Pre-populate ctypes.cdll's cache under the
+# short name that `louis` looks for, so the import succeeds without needing
+# DYLD_LIBRARY_PATH to be set externally.
+_homebrew_liblouis = '/opt/homebrew/lib/liblouis.20.dylib'
+if os.path.exists(_homebrew_liblouis):
+    ctypes.cdll.__dict__['liblouis.20.dylib'] = ctypes.CDLL(_homebrew_liblouis)
 
 # Import the translate and generate logic
 from translate import louis_translate

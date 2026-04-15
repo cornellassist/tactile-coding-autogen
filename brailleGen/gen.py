@@ -776,7 +776,15 @@ horiz_trapezoid (depth, leg, -leg, top_width, 3*(leg) + 2*(top_width), -vert_tra
         else:
             f.write(class_scad_code)
     # run OpenSCAD → STL
-    openscad_executable = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"  # or your Windows path
+    # Find OpenSCAD — check common macOS install locations then fall back to PATH
+    import shutil
+    openscad_executable = (
+        "/Applications/OpenSCAD/OpenSCAD.app/Contents/MacOS/OpenSCAD"
+        if os.path.exists("/Applications/OpenSCAD/OpenSCAD.app/Contents/MacOS/OpenSCAD")
+        else "/Applications/OpenSCAD-2021.01.app/Contents/MacOS/OpenSCAD"
+        if os.path.exists("/Applications/OpenSCAD-2021.01.app/Contents/MacOS/OpenSCAD")
+        else shutil.which("openscad") or "openscad"
+    )
     subprocess.run([
         openscad_executable,
         "-o", stl_path,

@@ -9,30 +9,46 @@
   <meta name="description" content="Web site created using create-react-app" />
   <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
 
-  <script src="quorum-website/WebBlockEditor/embed.js" type="text/javascript"></script>
-  <script src="quorum-website/QuorumStandardLibrary.js"></script>
-  <!-- <script src= "/blockEditor.js" type="module"></script> -->
-  <script src="quorum-website/WebBlockEditor/Run/load.js"></script>
-  <script type="text/javascript">Module['onRuntimeInitialized'] = function () {
-      import('/quorum-website/WebBlockEditor/blockEditor.js').then((BlockEditor) => {
+  <!-- Quorum block editor globals (subset of embed-quorum.js, without the remote script loading) -->
+  <script type="text/javascript">
+    var currentIDEInput_$Global_ = '';
+    var currentIDEOutput_$Global_ = 'QuorumUIOutput';
+    var currentUIContainer_$Global_ = 'QuorumUIContainer';
+    var total_console_length239847239482734 = 0;
+    var extraBuildFiles_$Global_ = {};
+    function update_console() {
+      if (typeof OuTpUt_$tRiNg_ !== 'undefined' && typeof currentIDEOutput_$Global_ !== 'undefined') {
+        var newLength = OuTpUt_$tRiNg_.length;
+        if (newLength > total_console_length239847239482734) {
+          var dom = document.getElementById(currentIDEOutput_$Global_);
+          if (dom != null) dom.insertAdjacentHTML('beforeend', OuTpUt_$tRiNg_.substring(total_console_length239847239482734, newLength));
+          total_console_length239847239482734 = newLength;
+        }
+      }
+    }
+    setInterval(update_console, 500);
+    // Redirect load.js's data/wasm fetch to the correct subdirectory
+    var Module = {};
+    Module.locateFile = function (path) {
+      return '/quorum-website/QuorumWebsite/Run/' + path;
+    };
+  </script>
+  <script src="/quorum-website/WebBlockEditor/Run/QuorumStandardLibrary.js"></script>
+  <script src="/quorum-website/QuorumWebsite/Run/load.js"></script>
+  <script src="/quorum-website/QuorumWebsite/html/script/jquery-1.8.3.min.js"></script>
+  <script src="/quorum-website/QuorumWebsite/html/script/script.js"></script>
+  <script type="text/javascript">
+    Module['onRuntimeInitialized'] = function () {
+      import('/quorum-website/QuorumWebsite/html/script/blockEditor.js').then(function (BlockEditor) {
         window.BLOCK_EDITOR = BlockEditor;
         if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', function () {
-
-            // LoadScript("https://quorumlanguage.com/script/load.js");
-            // LoadScript("https://quorumlanguage.com/script/QuorumStandardLibrary.js?version=13.4.0");
-            BlockEditor.Start();
-            console.log('started editor');
-          });
+          document.addEventListener('DOMContentLoaded', function () { BlockEditor.Start(); });
         } else {
-
-          // LoadScript("https://quorumlanguage.com/script/load.js");
-          // LoadScript("https://quorumlanguage.com/script/QuorumStandardLibrary.js?version=13.4.0");
           BlockEditor.Start();
-          console.log('started editor');
         }
       });
-    };</script>
+    };
+  </script>
 
   <!--
       manifest.json provides metadata used when your web app is installed on a
@@ -67,7 +83,7 @@
     } else if (userAgent.indexOf('Mac') != -1) {
       OSkey = 'CTRL';
       let heading = document.getElementById('blockHotkeyTitle');
-      heading.innerText = 'Hotkey Shortcuts (Mac)';
+      if (heading) heading.innerText = 'Hotkey Shortcuts (Mac)';
     } else {
       OSkey = 'ALT';
     }
@@ -76,35 +92,38 @@
     });
   </script>
   <script type="text/javascript">
-    // observe the ui container for mutations
-    const observerUIContainer = document.getElementById('QuorumUIContainer');
-    const observerBlockContainer = document.getElementById('BlockUIContainer');
-    var observerFocused = false;
-    // check to see if canvas was added to the ui container
-    const callback = (mutationList) => {
-      if (observerUIContainer.hasChildNodes()) {
-        let list = observerUIContainer.getElementsByTagName('canvas');
-        if (list.length != 0 && !observerFocused) {
-          observerBlockContainer.display = 'none';
-          observerBlockContainer.ariaHidden = 'true';
+    // observe the ui container for mutations — deferred until React has mounted
+    window.addEventListener('load', function () {
+      var observerFocused = false;
+      const observerUIContainer = document.getElementById('QuorumUIContainer');
+      const observerBlockContainer = document.getElementById('BlockUIContainer');
+      if (!observerUIContainer || !observerBlockContainer) return;
+
+      const callback = (mutationList) => {
+        if (observerUIContainer.hasChildNodes()) {
+          let list = observerUIContainer.getElementsByTagName('canvas');
+          if (list.length != 0 && !observerFocused) {
+            observerBlockContainer.display = 'none';
+            observerBlockContainer.ariaHidden = 'true';
+            let buttons = observerBlockContainer.getElementsByTagName('button');
+            if (buttons.length > 0) buttons[0].tabIndex = 0;
+            if (observerBlockContainer.contains(document.activeElement)) {
+              observerUIContainer.getElementsByTagName('button')[0].focus();
+              observerFocused = true;
+            }
+          }
+        } else {
+          observerBlockContainer.display = 'block';
+          observerBlockContainer.ariaHidden = 'false';
           let buttons = observerBlockContainer.getElementsByTagName('button');
           if (buttons.length > 0) buttons[0].tabIndex = 0;
-          if (observerBlockContainer.contains(document.activeElement)) {
-            observerUIContainer.getElementsByTagName('button')[0].focus();
-            observerFocused = true;
-          }
+          observerFocused = false;
         }
-      } else {
-        observerBlockContainer.display = 'block';
-        observerBlockContainer.ariaHidden = 'false';
-        let buttons = observerBlockContainer.getElementsByTagName('button');
-        if (buttons.length > 0) buttons[0].tabIndex = 0;
-        observerFocused = false;
-      }
-    };
+      };
 
-    const observer = new MutationObserver(callback);
-    observer.observe(observerUIContainer, { childList: true });
+      const observer = new MutationObserver(callback);
+      observer.observe(observerUIContainer, { childList: true });
+    });
   </script>
   </div>
 
